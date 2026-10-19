@@ -1,11 +1,12 @@
 'use client';
 
-import { FiMapPin } from 'react-icons/fi';
+import { FiLogOut, FiMapPin } from 'react-icons/fi';
 import SearchInput from './SearchInput';
 import TemperatureToggle from './TemperatureToggle';
 import HistoricalExportButton from './HistoricalExportButton';
 import NotificationCenter from './NotificationCenter';
 import { useWeather } from '@/context/WeatherContext';
+import { getSupabase } from '@/lib/supabase';
 
 export default function Header() {
     const { lat, lon, weatherData, searchedCity } = useWeather();
@@ -28,6 +29,7 @@ export default function Header() {
       
 
     const locationName = getDisplayLocation();
+    const signOut = async () => { await getSupabase()?.auth.signOut(); };
 
     return (
         <header className="relative z-[2000] mx-auto mb-7 flex max-w-7xl flex-col gap-3 xl:grid xl:grid-cols-[minmax(12rem,1fr)_auto_minmax(12rem,1fr)] xl:items-center xl:gap-5">
@@ -48,6 +50,7 @@ export default function Header() {
 
             <div className="flex w-full items-center justify-between gap-3 xl:w-auto xl:justify-end">
                 <NotificationCenter />
+            <button type="button" onClick={() => void signOut()} className="inline-flex h-10 shrink-0 items-center gap-1 rounded-xl border border-white/15 bg-slate-950/35 px-3 text-xs font-bold text-white/85 transition hover:bg-white/10"><FiLogOut size={15} /><span className="hidden sm:inline">Log out</span></button>
             <div className="hidden min-w-[150px] select-none text-right text-sm font-light text-white/70 lg:block">
                 <span className="font-semibold tracking-[.16em] text-cyan-200">IMORA</span><br />
                 Weather intelligence

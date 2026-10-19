@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { FiBarChart2, FiDownload, FiFileText, FiLoader, FiRefreshCw, FiTrash2, FiUpload } from 'react-icons/fi';
 import { useWeather } from '@/context/WeatherContext';
+import { getSupabase } from '@/lib/supabase';
 import { indeximMonthlyStats, monthDays, monthNames } from '@/data/indexim-rain-history';
 
 type DailyRain = { date: string; rain: number; probability: number; gust: number };
@@ -25,16 +26,16 @@ export default function MiningRainIntelligence() {
       const query = new URLSearchParams({ latitude: String(lat), longitude: String(lon), daily: 'precipitation_sum,precipitation_probability_max,wind_gusts_10m_max', forecast_days: '16', timezone: 'auto', wind_speed_unit: 'kmh' });
       const response = await fetch(`https://api.open-meteo.com/v1/forecast?${query}`); if (!response.ok) throw new Error('Forecast unavailable');
       const data = await response.json();
-      const nextDays = data.daily.time.map((date: string, index: number) => ({ date, rain: Number(data.daily.precipitation_sum[index] || 0), probability: Number(data.daily.precipitation_probability_max[index] || 0), gust: Number(data.daily.wind_gusts_10m_max[index] || 0) })); setDays(nextDays);
-      const stored = JSON.parse(window.localStorage.getItem('imora-model-forecast-daily') || '[]') as ForecastSnapshot[]; const merged = new Map(stored.map((item) => [item.date, item])); nextDays.forEach((item: DailyRain) => merged.set(item.date, { ...item, savedAt: Date.now() })); const nextSnapshots = [...merged.values()].sort((a, b) => a.date.localeCompare(b.date)).slice(-120); setSnapshots(nextSnapshots); window.localStorage.setItem('imora-model-forecast-daily', JSON.stringify(nextSnapshots));
+      const nextDays: DailyRain[] = data.daily.time.map((date: string, index: number) => ({ date, rain: Number(data.daily.precipitation_sum[index] || 0), probability: Number(data.daily.precipitation_probability_max[index] || 0), gust: Number(data.daily.wind_gusts_10m_max[index] || 0) })); setDays(nextDays);
+      const savedAt = Date.now(); setSnapshots((current) => { const merged = new Map(current.map((item) => [item.date, item])); nextDays.forEach((item: DailyRain) => merged.set(item.date, { ...item, savedAt })); return [...merged.values()].sort((a, b) => a.date.localeCompare(b.date)).slice(-120); });
+      const client = getSupabase(); if (client) void client.from('imora_status_history').insert({ data: { type: 'model-forecast-daily', values: nextDays.map((item) => ({ ...item, savedAt })) } });
     } catch (caught) { console.error(caught); setError('Forecast operasional belum dapat dimuat.'); }
     finally { setLoading(false); }
   }, [lat, lon]);
 
   useEffect(() => { void loadOperationalForecast(); }, [loadOperationalForecast]);
-  useEffect(() => { try { const saved = window.localStorage.getItem('imora-rain-gauge-daily'); if (saved) setActuals(JSON.parse(saved)); } catch { window.localStorage.removeItem('imora-rain-gauge-daily'); } }, []);
-  useEffect(() => { try { const saved = window.localStorage.getItem('imora-model-forecast-daily'); if (saved) setSnapshots(JSON.parse(saved)); } catch { window.localStorage.removeItem('imora-model-forecast-daily'); } }, []);
-  const persistActuals = (next: DailyActual[]) => { setActuals(next); window.localStorage.setItem('imora-rain-gauge-daily', JSON.stringify(next)); };
+  useEffect(() => { const client = getSupabase(); if (!client) return; void client.from('imora_status_history').select('data, created_at').order('created_at', { ascending: true }).then(({ data }) => { const rows = data || []; const latestActual = [...rows].reverse().find((row) => (row.data as { type?: string }).type === 'rain-gauge-actuals'); if (latestActual) setActuals(((latestActual.data as { values?: DailyActual[] }).values || [])); const forecastRows = rows.filter((row) => (row.data as { type?: string }).type === 'model-forecast-daily'); const merged = new Map<string, ForecastSnapshot>(); forecastRows.forEach((row) => ((row.data as { values?: ForecastSnapshot[] }).values || []).forEach((item) => merged.set(item.date, item))); if (merged.size) setSnapshots([...merged.values()].sort((a, b) => a.date.localeCompare(b.date)).slice(-120)); }); }, []);
+  const persistActuals = (next: DailyActual[]) => { setActuals(next); const client = getSupabase(); if (client) void client.from('imora_status_history').insert({ data: { type: 'rain-gauge-actuals', values: next } }); };
   const importActuals = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]; if (!file) return; setImportStatus('');
     try {
