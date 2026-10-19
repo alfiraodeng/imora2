@@ -1,0 +1,46 @@
+'use client';
+
+import { useState } from 'react';
+import { FiBarChart2, FiChevronLeft, FiChevronRight, FiCloud, FiHome, FiMenu, FiSettings, FiX } from 'react-icons/fi';
+import { useWeather } from '@/context/WeatherContext';
+import TodaysWeatherCard from './dashboard-cards/TodaysWeatherCard';
+import NextFourDays from './dashboard-cards/NextFourDays';
+import HourlyForecast from './dashboard-cards/HourlyForecast';
+import AnnualOutlook from './dashboard-cards/AnnualOutlook';
+import MiningRainIntelligence from './dashboard-cards/MiningRainIntelligence';
+import dynamic from 'next/dynamic';
+import Header from '../header/Header';
+import BackgroundVideo from './dashboard-background/BackgroundVideo';
+
+const Map = dynamic(() => import('./dashboard-cards/Map'), { ssr: false, loading: () => <div className="h-[400px] w-full rounded-2xl border border-white/15 bg-white/10" /> });
+type Workspace = 'overview' | 'forecast' | 'mining' | 'data';
+const navigation: Array<{ id: Workspace; label: string; icon: typeof FiHome; note: string }> = [
+  { id: 'overview', label: 'Overview', icon: FiHome, note: 'Map, outlook & operations' }, { id: 'forecast', label: 'Live Forecast', icon: FiCloud, note: 'Hourly & daily forecast' },
+  { id: 'mining', label: 'Report', icon: FiBarChart2, note: 'Rain, delay & accuracy' },
+  { id: 'data', label: 'Data & Settings', icon: FiSettings, note: 'Rain-gauge import' },
+];
+
+export default function WeatherDashboard() {
+  const { forecast, updatedAt } = useWeather(); const [active, setActive] = useState<Workspace>('overview'); const [navOpen, setNavOpen] = useState(false); const [sidebarPinned, setSidebarPinned] = useState(false); const [sidebarHover, setSidebarHover] = useState(false);
+  const title = navigation.find((item) => item.id === active)!;
+  // Compact mode is a desktop convenience only. On a phone the drawer must
+  // always show its labels; hiding them made the mobile navigation feel like
+  // an unexplained strip of icons.
+  const desktopCollapsed = !sidebarPinned && !sidebarHover;
+  const updatedTime = updatedAt ? new Intl.DateTimeFormat('id-ID', { hour: '2-digit', minute: '2-digit' }).format(updatedAt) : '—';
+  const choose = (id: Workspace) => { setActive(id); setNavOpen(false); window.scrollTo({ top: 0, behavior: 'smooth' }); };
+  return <div className="weather-app relative min-h-screen overflow-x-hidden text-white"><div className="absolute inset-0 z-0"><BackgroundVideo /></div>
+    <aside onMouseEnter={() => setSidebarHover(true)} onMouseLeave={() => setSidebarHover(false)} className={`fixed inset-y-0 left-0 z-40 flex w-[min(84vw,20rem)] flex-col border-r border-white/10 bg-slate-950/95 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))] shadow-2xl backdrop-blur-2xl transition-[transform,width] duration-500 ease-[cubic-bezier(.22,1,.36,1)] lg:w-56 lg:translate-x-0 ${desktopCollapsed ? 'lg:!w-[72px]' : 'lg:w-56'} ${navOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+      <div className={`mb-7 flex items-center justify-between px-2 transition-all duration-300 ${desktopCollapsed ? 'lg:justify-center' : 'lg:justify-between'}`}><div className={`min-w-0 overflow-hidden whitespace-nowrap transition-[max-width,opacity] duration-300 ease-out max-w-[180px] opacity-100 ${desktopCollapsed ? 'lg:max-w-0 lg:opacity-0' : ''}`}><p className="text-xl font-black tracking-tight">IMORA <span className="text-cyan-200">2.0</span></p><p className="mt-1 text-[9px] font-bold tracking-[.18em] text-white/45">INDEXIM OPERATIONS</p></div><button onClick={() => setNavOpen(false)} className="rounded-xl border border-white/10 p-2 text-white/75 transition hover:bg-white/10 lg:hidden" aria-label="Tutup menu"><FiX /></button><button onClick={() => setSidebarPinned((value) => !value)} className="hidden rounded-lg border border-white/15 p-2 text-white/65 transition hover:bg-white/10 lg:block" title={sidebarPinned ? 'Unpin: sidebar akan otomatis masuk saat kursor keluar' : 'Pin: sidebar tetap terbuka'}>{sidebarPinned ? <FiChevronLeft /> : <FiChevronRight />}</button></div>
+      <p className={`mb-2 px-3 text-[10px] font-bold uppercase tracking-[.16em] text-white/35 transition-[max-width,opacity] max-w-[160px] opacity-100 ${desktopCollapsed ? 'lg:max-w-0 lg:opacity-0' : ''}`}>Workspace</p>
+      <nav className="space-y-1.5">{navigation.map((item) => { const Icon = item.icon; return <button key={item.id} onClick={() => choose(item.id)} title={item.label} className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition-all duration-300 ${desktopCollapsed ? 'lg:justify-center lg:gap-0' : ''} ${active === item.id ? 'bg-cyan-300 text-slate-950 shadow-lg shadow-cyan-950/25' : 'text-white/65 hover:bg-white/10 hover:text-white'}`}><Icon size={18} className="shrink-0" /><span className={`min-w-0 overflow-hidden whitespace-nowrap transition-[max-width,opacity] duration-300 max-w-[160px] opacity-100 ${desktopCollapsed ? 'lg:max-w-0 lg:opacity-0' : ''}`}><b className="block text-sm">{item.label}</b><small className={`block text-[10px] ${active === item.id ? 'text-slate-700' : 'text-white/40'}`}>{item.note}</small></span></button>; })}</nav>
+      <div className={`mt-auto overflow-hidden rounded-xl border border-white/10 bg-white/5 p-3 text-[10px] text-white/55 transition-[max-height,opacity,padding] duration-300 max-h-20 opacity-100 ${desktopCollapsed ? 'lg:max-h-0 lg:border-transparent lg:p-0 lg:opacity-0' : ''}`}><span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-300" /> <b className="ml-1 text-white/80">LIVE</b><br />Forecast model & KPP baseline ready</div>
+    </aside>
+    {navOpen && <button onClick={() => setNavOpen(false)} className="fixed inset-0 z-30 bg-slate-950/55 lg:hidden" aria-label="Close menu" />}
+    <main className={`relative z-10 min-h-screen px-3 py-4 transition-[margin] duration-500 ease-[cubic-bezier(.22,1,.36,1)] sm:px-5 lg:px-8 lg:py-6 ${desktopCollapsed ? 'lg:!ml-[72px]' : 'lg:ml-56'}`}><div className="mx-auto max-w-7xl"><div className="mb-5 flex items-center justify-between rounded-2xl border border-white/15 bg-slate-950/35 p-3 shadow-lg backdrop-blur-md"><div className="flex min-w-0 items-center gap-3"><button onClick={() => setNavOpen(true)} className="shrink-0 rounded-xl border border-white/15 p-2 transition hover:bg-white/10 lg:hidden" aria-label="Buka menu"><FiMenu /></button><div className="min-w-0"><p className="truncate text-sm font-bold text-white">{title.label}</p><p className="truncate text-[10px] text-white/50">{title.note}</p></div></div><span className="shrink-0 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[9px] text-white/60 sm:px-3 sm:text-[10px]">Updated {updatedTime}</span></div><Header />
+      {active === 'overview' && <><div className="mb-5 grid gap-4 lg:grid-cols-[.8fr_1.2fr]"><TodaysWeatherCard />{forecast && forecast.length > 0 && <NextFourDays days={forecast} />}</div><HourlyForecast /><AnnualOutlook /><section className="mt-5"><div className="mb-3 rounded-2xl border border-cyan-200/15 bg-cyan-300/10 p-4 text-sm"><b className="text-cyan-50">Map & Engineering</b><p className="mt-1 text-white/65">Pit, Disposal, monitoring multi point, polygon, dan DXF tersedia langsung di Home.</p></div><Map /></section></>}
+      {active === 'forecast' && <><div className="mb-5 grid gap-4 lg:grid-cols-[.8fr_1.2fr]"><TodaysWeatherCard />{forecast && forecast.length > 0 && <NextFourDays days={forecast} />}</div><HourlyForecast /></>}
+      {active === 'mining' && <MiningRainIntelligence />}
+      {active === 'data' && <div className="rounded-2xl border border-white/15 bg-slate-950/40 p-5"><h2 className="text-lg font-bold">Data & Settings</h2><p className="mt-2 text-sm text-white/60">Import actual rain-gauge dan forecast accuracy ada di Mining Intelligence. DXF dan data spatial tersedia di Home Overview.</p><div className="mt-4 flex flex-wrap gap-2"><button onClick={() => choose('mining')} className="rounded-xl bg-cyan-300 px-3 py-2 text-xs font-bold text-slate-950">Rain-gauge data</button><button onClick={() => choose('overview')} className="rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-xs font-bold">DXF & spatial data</button></div></div>}
+    </div></main></div>;
+}
