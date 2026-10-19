@@ -18,6 +18,9 @@ export const metadata: Metadata = {
   title: "IMORA | Mining Rain Intelligence",
   description:
     "Pantau cuaca, curah hujan, dan risiko operasional tambang secara real-time.",
+  icons: {
+    icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
+  },
   openGraph: {
     title: "IMORA | Mining Rain Intelligence",
     description:
