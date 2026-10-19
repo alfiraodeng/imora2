@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { FiLogOut, FiMapPin } from 'react-icons/fi';
+import { FiMapPin } from 'react-icons/fi';
 import SearchInput from './SearchInput';
 import TemperatureToggle from './TemperatureToggle';
 import HistoricalExportButton from './HistoricalExportButton';
@@ -12,7 +12,13 @@ import { getSupabase } from '@/lib/supabase';
 export default function Header() {
     const { lat, lon, weatherData, searchedCity } = useWeather();
     const [userLabel, setUserLabel] = useState('');
-    useEffect(() => { void getSupabase()?.auth.getUser().then(({ data }) => setUserLabel(data.user?.email || '')); }, []);
+    useEffect(() => {
+        const client = getSupabase();
+        if (!client) return;
+        void client.auth.getUser().then(({ data }) => setUserLabel(data.user?.email || ''));
+        const { data: subscription } = client.auth.onAuthStateChange((_event, session) => setUserLabel(session?.user?.email || ''));
+        return () => subscription.subscription.unsubscribe();
+    }, []);
 
     const getDisplayLocation = () => {
         if (searchedCity) return searchedCity;
@@ -32,8 +38,6 @@ export default function Header() {
       
 
     const locationName = getDisplayLocation();
-    const signOut = async () => { await getSupabase()?.auth.signOut(); };
-
     return (
         <header className="relative z-[2000] mx-auto mb-7 flex max-w-7xl flex-col gap-3 xl:grid xl:grid-cols-[minmax(12rem,1fr)_auto_minmax(12rem,1fr)] xl:items-center xl:gap-5">
             {/* Left: Location + icon */}
@@ -51,14 +55,13 @@ export default function Header() {
                 <HistoricalExportButton />
             </div>
 
-            <div className="flex w-full items-center justify-between gap-3 xl:w-auto xl:justify-end">
-                <NotificationCenter />
-            {userLabel && <span className="hidden max-w-44 truncate rounded-xl border border-white/15 bg-slate-950/35 px-3 py-2 text-xs font-semibold text-cyan-100 lg:inline" title={userLabel}>{userLabel}</span>}
-            <button type="button" onClick={() => void signOut()} className="inline-flex h-10 shrink-0 items-center gap-1 rounded-xl border border-white/15 bg-slate-950/35 px-3 text-xs font-bold text-white/85 transition hover:bg-white/10"><FiLogOut size={15} /><span className="hidden sm:inline">Log out</span></button>
-            <div className="hidden min-w-[150px] select-none text-right text-sm font-light text-white/70 lg:block">
+            <div className="flex w-full items-center justify-end gap-3 xl:w-auto">
+            <div className="hidden min-w-[150px] select-none text-right text-sm font-light text-white/70 2xl:block">
                 <span className="font-semibold tracking-[.16em] text-cyan-200">IMORA</span><br />
                 Weather intelligence
             </div>
+                <NotificationCenter />
+            {userLabel && <div className="min-w-0 max-w-[11rem] rounded-xl border border-cyan-200/20 bg-slate-950/45 px-3 py-1.5 text-right shadow-lg backdrop-blur sm:max-w-[15rem]" title={userLabel}><span className="block text-[9px] font-bold uppercase tracking-[.12em] text-white/40">Akun aktif</span><b className="block truncate text-xs text-cyan-100">{userLabel}</b></div>}
             </div>
 
         </header>
