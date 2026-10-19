@@ -526,7 +526,7 @@ export default function Map() {
           <button onClick={() => setMapMode('dark')} className={`px-3 py-2 transition ${mapMode === 'dark' ? 'bg-white text-slate-900' : 'hover:bg-white/15'}`}>Map</button>
           <button onClick={() => setMapMode('satellite')} className={`px-3 py-2 transition ${mapMode === 'satellite' ? 'bg-white text-slate-900' : 'hover:bg-white/15'}`}>Satellite</button>
         </div>}
-        <div className="absolute left-3 top-3 z-[1000] flex overflow-hidden rounded-lg border border-cyan-100/30 bg-slate-950/85 text-xs text-white shadow-lg backdrop-blur">
+        <div className="absolute left-14 top-3 z-[1000] flex overflow-hidden rounded-lg border border-cyan-100/30 bg-slate-950/85 text-xs text-white shadow-lg backdrop-blur">
           <button type="button" onClick={() => { setShowIndeximAssets(true); setIndeximFocusRequest((current) => current + 1); }} className="px-3 py-2 font-bold text-cyan-100 transition hover:bg-cyan-300/15">INDEXIM SITE</button>
           {showIndeximAssets && <button type="button" onClick={() => setShowIndeximAssets(false)} className="border-l border-white/15 px-2.5 py-2 text-white/65 transition hover:bg-white/10 hover:text-white" aria-label="Sembunyikan aset Indexim">×</button>}
         </div>
