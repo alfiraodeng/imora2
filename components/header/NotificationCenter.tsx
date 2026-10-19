@@ -47,15 +47,16 @@ export default function NotificationCenter() {
     const receive = (event: Event) => {
       const payload = (event as CustomEvent<MonitoringPayload>).detail;
       if (!payload?.alerts) return;
-      setScenarioName(payload.scenarioName); setScenarioAlerts(payload.alerts); setScenarioCheckedAt(payload.checkedAt);
-      const ordered = [...payload.alerts].sort((a, b) => rank[levelFor(b)] - rank[levelFor(a)]);
+      const notifiable = payload.alerts.filter((alert) => levelFor(alert) !== 'aman');
+      setScenarioName(payload.scenarioName); setScenarioAlerts(notifiable); setScenarioCheckedAt(payload.checkedAt);
+      const ordered = [...notifiable].sort((a, b) => rank[levelFor(b)] - rank[levelFor(a)]);
       const lead = ordered[0]; const level = lead ? levelFor(lead) : 'aman';
-      const signature = payload.alerts.map((alert) => `${alert.id}:${levelFor(alert)}:${alert.report?.summary || ''}`).join('|');
+      const signature = notifiable.map((alert) => `${alert.id}:${levelFor(alert)}:${alert.report?.summary || ''}`).join('|');
       if (signature === scenarioSignature.current) return;
       scenarioSignature.current = signature;
-      const nonNormal = payload.alerts.filter((alert) => levelFor(alert) !== 'aman');
-      const title = nonNormal.length ? `${labelFor(level)} · ${lead.name}` : 'AMAN · Semua titik terkendali';
-      const detail = nonNormal.length ? `${lead.report?.summary || 'Perubahan cuaca terdeteksi'} · ${lead.report?.metrics || ''}` : `${payload.alerts.length} titik pada ${payload.scenarioName} tidak menunjukkan cuaca signifikan dalam horizon forecast.`;
+      if (!lead) return;
+      const title = `${labelFor(level)} · ${lead.name}`;
+      const detail = `${lead.report?.summary || 'Perubahan cuaca terdeteksi'} · ${lead.report?.metrics || ''}`;
       setPopup({ level, title, detail });
       if ((level === 'waspada' || level === 'siaga') && typeof Notification !== 'undefined' && Notification.permission === 'granted') new Notification(`IMORA ${labelFor(level)} · ${lead.name}`, { body: detail });
     };
@@ -73,7 +74,7 @@ export default function NotificationCenter() {
     <button type="button" onClick={() => setOpen((value) => !value)} className={`relative grid h-10 w-10 place-items-center rounded-xl border transition ${open ? 'border-cyan-200/60 bg-cyan-300 text-slate-950' : 'border-white/15 bg-slate-950/35 text-white/85 hover:bg-white/10'}`} aria-label="Buka notifikasi forecast">
       <FiBell size={18} />{badge > 0 && <span className={`absolute -right-1 -top-1 grid min-h-4 min-w-4 place-items-center rounded-full border border-slate-950 px-1 text-[9px] font-black text-white ${critical ? 'bg-rose-500' : 'bg-amber-500'}`}>{badge > 9 ? '9+' : badge}</span>}
     </button>
-    {popup && <aside className={`fixed right-4 top-4 z-[3000] w-[min(92vw,25rem)] rounded-2xl border p-4 shadow-2xl backdrop-blur-xl ${styleFor(popup.level)}`} role="status"><div className="flex items-start gap-3"><div className="mt-0.5">{popup.level === 'aman' ? <FiCheckCircle size={20} /> : popup.level === 'pantau' ? <FiCloudRain size={20} /> : <FiAlertTriangle size={20} />}</div><div className="min-w-0 flex-1"><p className="text-xs font-black tracking-wide">{popup.title}</p><p className="mt-1 text-xs leading-relaxed text-white/80">{popup.detail}</p><p className="mt-2 text-[10px] text-white/50">Forecast titik scenario · bukan peringatan resmi BMKG.</p></div><button onClick={() => setPopup(null)} className="rounded-lg p-1 text-white/70 hover:bg-white/10" aria-label="Tutup pop-up"><FiX /></button></div></aside>}
+    {popup && <aside className={`fixed right-4 top-4 z-[3000] w-[min(92vw,25rem)] rounded-2xl border p-4 shadow-2xl backdrop-blur-xl ${styleFor(popup.level)}`} role="status"><div className="flex items-start gap-3"><div className="mt-0.5">{popup.level === 'pantau' ? <FiCloudRain size={20} /> : <FiAlertTriangle size={20} />}</div><div className="min-w-0 flex-1"><p className="text-xs font-black tracking-wide">{popup.title}</p><p className="mt-1 text-xs leading-relaxed text-white/80">{popup.detail}</p><p className="mt-2 text-[10px] text-white/50">Forecast titik scenario aktif.</p></div><button onClick={() => setPopup(null)} className="rounded-lg p-1 text-white/70 hover:bg-white/10" aria-label="Tutup pop-up"><FiX /></button></div></aside>}
     {open && <><button onClick={() => setOpen(false)} className="fixed inset-0 z-40 cursor-default" aria-label="Tutup notifikasi" /><section className="absolute right-0 top-12 z-50 w-[min(92vw,29rem)] overflow-hidden rounded-2xl border border-white/15 bg-slate-950/95 shadow-2xl shadow-slate-950/60 backdrop-blur-2xl">
       <header className="flex items-start justify-between border-b border-white/10 px-4 py-3"><div><p className="flex items-center gap-2 text-sm font-bold"><FiBell className="text-cyan-200" /> Alert pusat operasi</p><p className="mt-1 text-[10px] text-white/50">Status scenario aktif dan titik Pit & Disposal · refresh 10 menit</p></div><button onClick={() => setOpen(false)} className="rounded-lg p-1.5 text-white/55 hover:bg-white/10"><FiX /></button></header>
       <div className="max-h-[min(65vh,33rem)] overflow-y-auto p-2">
@@ -82,7 +83,7 @@ export default function NotificationCenter() {
         {!loading && !alerts.length && !scenarioAlerts.length && <div className="p-5 text-center"><FiCheckCircle className="mx-auto text-emerald-300" size={24} /><p className="mt-2 text-sm font-semibold">Tidak ada alert aktif</p><p className="mt-1 text-xs text-white/50">Scenario akan muncul setelah forecast titik selesai dimuat.</p></div>}
         {!!alerts.length && <><p className="px-2 pb-1 pt-2 text-[10px] font-bold uppercase tracking-[.12em] text-white/45">Aset operasional</p>{alerts.map((alert) => <button key={alert.id} onClick={() => { setCoordinates(alert.asset.lat, alert.asset.lon, alert.asset.name); setOpen(false); }} className={`mb-1 w-full rounded-xl border p-3 text-left transition hover:bg-white/10 ${alert.severity === 'siaga' ? 'border-rose-400/30 bg-rose-500/10' : 'border-amber-300/25 bg-amber-400/10'}`}><div className="flex gap-2"><div className={`mt-0.5 ${alert.severity === 'siaga' ? 'text-rose-300' : 'text-amber-200'}`}>{alert.rain >= 4 ? <FiCloudRain size={17} /> : <FiWind size={17} />}</div><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-2"><b className="text-xs">{alert.asset.name}</b><span className={`rounded-full px-2 py-0.5 text-[9px] font-black ${alert.severity === 'siaga' ? 'bg-rose-400 text-rose-950' : 'bg-amber-300 text-amber-950'}`}>{alert.severity.toUpperCase()}</span></div><p className="mt-1 text-xs font-semibold text-white/90">{alert.title}</p><p className="mt-1 text-[11px] text-white/65">{alert.detail}</p><p className="mt-1 text-[10px] text-white/45">Aksi: {alert.action}</p></div><FiNavigation className="mt-1 shrink-0 text-white/35" size={14} /></div></button>)}</>}
       </div>
-      <footer className="flex items-center justify-between gap-2 border-t border-white/10 px-4 py-2.5"><p className="text-[9px] leading-relaxed text-white/45">Forecast model, bukan observasi lapangan atau peringatan resmi BMKG. Update {scenarioCheckedAt || checkedAt ? new Intl.DateTimeFormat('id-ID', { hour: '2-digit', minute: '2-digit' }).format(scenarioCheckedAt || checkedAt || Date.now()) : '—'} WITA.</p><button onClick={enableBrowserAlerts} className="shrink-0 rounded-lg border border-white/15 px-2 py-1.5 text-[10px] font-bold text-cyan-100 hover:bg-white/10">Aktifkan browser</button></footer>
+      <footer className="flex items-center justify-between gap-2 border-t border-white/10 px-4 py-2.5"><p className="text-[9px] leading-relaxed text-white/45">Pembaruan forecast {scenarioCheckedAt || checkedAt ? new Intl.DateTimeFormat('id-ID', { hour: '2-digit', minute: '2-digit' }).format(scenarioCheckedAt || checkedAt || Date.now()) : '—'} WITA.</p><button onClick={enableBrowserAlerts} className="shrink-0 rounded-lg border border-white/15 px-2 py-1.5 text-[10px] font-bold text-cyan-100 hover:bg-white/10">Aktifkan browser</button></footer>
     </section></>}
   </div>;
 }
