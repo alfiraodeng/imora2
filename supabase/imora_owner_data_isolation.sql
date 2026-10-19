@@ -12,6 +12,12 @@ create policy "imora_scenarios_read_own"
 on public.imora_scenarios for select to authenticated
 using (owner_id = auth.uid());
 
+drop policy if exists "imora_scenarios_owner_write" on public.imora_scenarios;
+create policy "imora_scenarios_owner_write"
+on public.imora_scenarios for all to authenticated
+using (owner_id = auth.uid())
+with check (owner_id = auth.uid());
+
 drop policy if exists "imora_areas_logged_in_read" on public.imora_monitoring_areas;
 drop policy if exists "imora_areas_read_own" on public.imora_monitoring_areas;
 create policy "imora_areas_read_own"
@@ -31,3 +37,23 @@ drop policy if exists "imora_history_read_own" on public.imora_status_history;
 create policy "imora_history_read_own"
 on public.imora_status_history for select to authenticated
 using (owner_id = auth.uid());
+
+drop policy if exists "imora_history_owner_write" on public.imora_status_history;
+create policy "imora_history_owner_write"
+on public.imora_status_history for all to authenticated
+using (owner_id = auth.uid())
+with check (owner_id = auth.uid());
+
+-- These two tables may be installed later. When present, complete their
+-- owner-only CRUD contract for retention and cleanup actions.
+do $$
+begin
+  if to_regclass('public.imora_notifications') is not null then
+    execute 'drop policy if exists "imora_notifications_delete_own" on public.imora_notifications';
+    execute 'create policy "imora_notifications_delete_own" on public.imora_notifications for delete to authenticated using (owner_id = auth.uid())';
+  end if;
+  if to_regclass('public.imora_forecast_history') is not null then
+    execute 'drop policy if exists "imora_forecast_history_delete_own" on public.imora_forecast_history';
+    execute 'create policy "imora_forecast_history_delete_own" on public.imora_forecast_history for delete to authenticated using (owner_id = auth.uid())';
+  end if;
+end $$;

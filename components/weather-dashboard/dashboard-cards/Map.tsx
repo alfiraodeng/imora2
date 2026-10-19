@@ -385,7 +385,7 @@ export default function Map() {
         const cutoff = Date.now() - 24 * 60 * 60 * 1000;
         const next = { ...current };
         updated.forEach((point) => { if (point.report) { const key = `${point.lat.toFixed(4)},${point.lon.toFixed(4)}`; next[key] = [...(next[key] || []).filter((item) => item.at >= cutoff), { at: Date.now(), level: point.report.level }].slice(-24); } });
-        const client = getSupabase(); if (client) void client.from('imora_status_history').insert({ data: { type: 'monitoring-history', values: next } }); return next;
+        const client = getSupabase(); if (client && authUserId) void client.from('imora_status_history').insert({ owner_id: authUserId, data: { type: 'monitoring-history', values: next } }); return next;
       });
       const scenarioLabel = scenarios.find((scenario) => scenario.id === selectedScenario)?.name || 'Titik operasional aktif';
       void saveForecastHistory(scenarioLabel, updated);
@@ -412,7 +412,7 @@ export default function Map() {
       }
     } catch (error) { console.error(error); setClickError('Forecast multi-titik belum dapat dimuat. Coba lagi.'); }
     finally { setLoadingReports(false); }
-  }, [notificationPermission, points, scenarios, selectedScenario]);
+  }, [authUserId, notificationPermission, points, scenarios, selectedScenario]);
 
   // Overview is operational by default: whenever the active scenario's point
   // coordinates arrive from the database (or are changed), fetch its forecast

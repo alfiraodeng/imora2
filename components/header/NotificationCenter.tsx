@@ -39,7 +39,26 @@ export default function NotificationCenter() {
   const { setCoordinates, updatedAt } = useWeather();
   const [open, setOpen] = useState(false); const [loading, setLoading] = useState(true); const [alerts, setAlerts] = useState<AssetAlert[]>([]); const [checkedAt, setCheckedAt] = useState<number | null>(null);
   const [scenarioName, setScenarioName] = useState(''); const [scenarioAlerts, setScenarioAlerts] = useState<MonitoringAlert[]>([]); const [scenarioCheckedAt, setScenarioCheckedAt] = useState<number | null>(null); const [popup, setPopup] = useState<{ level: ScenarioLevel; title: string; detail: string } | null>(null);
-  const lastBrowserAlert = useRef(''); const scenarioSignature = useRef(''); const dismissedAssetIds = useRef(new Set<string>()); const dismissedScenarioKeys = useRef(new Set<string>());
+  const lastBrowserAlert = useRef(''); const scenarioSignature = useRef(''); const dismissedAssetIds = useRef(new Set<string>()); const dismissedScenarioKeys = useRef(new Set<string>()); const authenticatedUserId = useRef<string | null>(null);
+
+  // NotificationCenter stays mounted while the authenticated account changes.
+  // Never leave an earlier user's scenario alert visible for the next user.
+  useEffect(() => {
+    const client = getSupabase(); if (!client) return;
+    const syncUser = (id: string | null) => {
+      if (authenticatedUserId.current === id) return;
+      authenticatedUserId.current = id; scenarioSignature.current = ''; dismissedScenarioKeys.current.clear();
+      setScenarioName(''); setScenarioAlerts([]); setScenarioCheckedAt(null); setPopup(null);
+      if (!id) return;
+      void client.from('imora_notifications').select('fingerprint').eq('owner_id', id).eq('is_dismissed', true).then(({ data }) => {
+        if (authenticatedUserId.current !== id) return;
+        dismissedScenarioKeys.current = new Set((data || []).map((row) => String(row.fingerprint).replace(/^scenario:/, '')));
+      });
+    };
+    void client.auth.getUser().then(({ data }) => syncUser(data.user?.id || null));
+    const { data: subscription } = client.auth.onAuthStateChange((_event, session) => syncUser(session?.user?.id || null));
+    return () => subscription.subscription.unsubscribe();
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -93,9 +112,14 @@ export default function NotificationCenter() {
 
   const enableBrowserAlerts = async () => { if (typeof Notification !== 'undefined') await Notification.requestPermission(); };
   const clearAlerts = async () => {
-    alerts.forEach((alert) => dismissedAssetIds.current.add(alert.id)); scenarioAlerts.forEach((alert) => dismissedScenarioKeys.current.add(scenarioKey(alert)));
     const client = getSupabase(); const fingerprints = scenarioAlerts.map((alert) => `scenario:${scenarioKey(alert)}`);
-    if (client && fingerprints.length) { const { data: userData } = await client.auth.getUser(); if (userData.user) await client.from('imora_notifications').update({ is_dismissed: true, dismissed_at: new Date().toISOString() }).eq('owner_id', userData.user.id).in('fingerprint', fingerprints); }
+    if (client && fingerprints.length) {
+      const { data: userData } = await client.auth.getUser();
+      if (!userData.user) { setPopup({ level: 'waspada', title: 'Clear belum tersimpan', detail: 'Sesi login tidak ditemukan. Silakan login ulang.' }); return; }
+      const { error } = await client.from('imora_notifications').update({ is_dismissed: true, dismissed_at: new Date().toISOString() }).eq('owner_id', userData.user.id).in('fingerprint', fingerprints);
+      if (error) { setPopup({ level: 'waspada', title: 'Clear belum tersimpan', detail: error.message }); return; }
+    }
+    alerts.forEach((alert) => dismissedAssetIds.current.add(alert.id)); scenarioAlerts.forEach((alert) => dismissedScenarioKeys.current.add(scenarioKey(alert)));
     setAlerts([]); setScenarioAlerts([]); setPopup(null);
   };
   const critical = alerts.filter((alert) => alert.severity === 'siaga').length + scenarioAlerts.filter((alert) => levelFor(alert) === 'siaga').length;
