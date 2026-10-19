@@ -35,7 +35,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
       : await client.auth.signInWithPassword({ email: email.trim(), password });
     setSubmitting(false);
     if (result.error) { setMessage(result.error.message); return; }
-    if (registering) {
+    if (registering && !result.data.session) {
       // Supabase's "Confirm email" setting enforces this server-side. Signing
       // out here also keeps this screen consistent if a provider returns a
       // transient session immediately after registration.
@@ -43,6 +43,8 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
       setVerificationEmail(email.trim());
       setVerificationPending(true);
       setMessage('Link verifikasi telah dikirim. Konfirmasi email terlebih dahulu untuk mengaktifkan akun.');
+    } else if (registering) {
+      setMessage('Akun berhasil dibuat. Anda langsung masuk ke IMORA.');
     }
   };
 
