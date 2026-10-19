@@ -233,6 +233,7 @@ export default function Map() {
   const [loadingReports, setLoadingReports] = useState(false);
   const [selectionMode, setSelectionMode] = useState<'single' | 'multi'>('single');
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
+  const [authUserId, setAuthUserId] = useState<string | null>(null);
   const [scenarioName, setScenarioName] = useState('');
   const [selectedScenario, setSelectedScenario] = useState('');
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | 'unsupported'>('unsupported');
@@ -257,10 +258,25 @@ export default function Map() {
     if ('Notification' in window) setNotificationPermission(Notification.permission);
     const supabase = getSupabase();
     if (!supabase) return;
+    void supabase.auth.getUser().then(({ data }) => setAuthUserId(data.user?.id || null));
+    const { data: subscription } = supabase.auth.onAuthStateChange((_event, nextSession) => setAuthUserId(nextSession?.user?.id || null));
+    return () => subscription.subscription.unsubscribe();
+  }, []);
+
+  // The map component stays mounted when a user signs out and another user
+  // signs in in the same browser. Reset first, then load only this user's rows.
+  useEffect(() => {
+    const supabase = getSupabase();
+    setScenarios([]); setSelectedScenario(''); setAreas([]); setHistory({});
+    setSelectionMode('single');
+    setPoints([{ id: 'indexim-site-default', lat: INDEXIM_SITE_CENTER[0], lon: INDEXIM_SITE_CENTER[1], name: 'Indexim Site' }]);
+    if (!supabase || !authUserId) return;
+    let cancelled = false;
     void Promise.all([
-      supabase.from('imora_scenarios').select('id, name, data').order('created_at', { ascending: true }),
+      supabase.from('imora_scenarios').select('id, name, data').eq('owner_id', authUserId).order('created_at', { ascending: true }),
       supabase.from('imora_monitoring_areas').select('id, name, data').order('created_at', { ascending: true }),
     ]).then(async ([scenarioResult, areaResult]) => {
+      if (cancelled) return;
       if (scenarioResult.data?.length) {
         const loadedScenarios = scenarioResult.data.map((row) => {
         const data = row.data as Pick<Scenario, 'mode' | 'points'>;
@@ -275,10 +291,12 @@ export default function Map() {
         return { id: String(row.id), name: row.name, color: data.color, vertices: data.vertices };
       }));
       const historyResult = await supabase.from('imora_status_history').select('data').order('created_at', { ascending: false }).limit(1).maybeSingle();
+      if (cancelled) return;
       const savedHistory = historyResult.data?.data as { type?: string; values?: StatusHistory } | null;
       if (savedHistory?.type === 'monitoring-history' && savedHistory.values) setHistory(savedHistory.values);
     });
-  }, []);
+    return () => { cancelled = true; };
+  }, [authUserId]);
 
   const persistScenarios = (next: Scenario[]) => {
     setScenarios(next);
@@ -432,6 +450,28 @@ export default function Map() {
     setPoints(scenario.points.map((point) => ({ ...point, id: `${point.lat}-${point.lon}-${Date.now()}-${Math.random()}` })));
   };
 
+  const deleteScenario = async () => {
+    const scenario = scenarios.find((item) => item.id === selectedScenario);
+    if (!scenario || !window.confirm(`Hapus scenario "${scenario.name}"?`)) return;
+    const supabase = getSupabase();
+    if (supabase) {
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData.user) { setClickError('Sesi login tidak ditemukan. Silakan login ulang.'); return; }
+      const { error } = await supabase.from('imora_scenarios').delete().eq('id', scenario.id).eq('owner_id', userData.user.id);
+      if (error) { setClickError(`Scenario tidak dapat dihapus: ${error.message}`); return; }
+    }
+    const next = scenarios.filter((item) => item.id !== scenario.id);
+    setScenarios(next); setScenarioName('');
+    const nextActive = next[next.length - 1];
+    if (nextActive) {
+      setSelectedScenario(nextActive.id); setSelectionMode(nextActive.mode);
+      setPoints(nextActive.points.map((point) => ({ ...point, id: `${point.lat}-${point.lon}-${Date.now()}-${Math.random()}` })));
+    } else {
+      setSelectedScenario(''); setSelectionMode('single');
+      setPoints([{ id: 'indexim-site-default', lat: INDEXIM_SITE_CENTER[0], lon: INDEXIM_SITE_CENTER[1], name: 'Indexim Site' }]);
+    }
+  };
+
   const enableAlerts = async () => {
     if (!('Notification' in window)) { setClickError('Notifikasi browser tidak didukung di perangkat ini.'); return; }
     const permission = await Notification.requestPermission();
@@ -569,7 +609,7 @@ export default function Map() {
         <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-white/10 pt-3">
           <input value={scenarioName} onChange={(event) => setScenarioName(event.target.value)} placeholder="Nama scenario, mis. Site Tambang A" className="h-9 min-w-[190px] flex-1 rounded-lg border border-white/15 bg-slate-950/30 px-3 text-xs text-white outline-none placeholder:text-white/35 focus:border-cyan-200" />
           <button type="button" onClick={saveScenario} disabled={!points.length} className="inline-flex h-9 items-center gap-1 rounded-lg border border-white/20 bg-white/10 px-3 text-xs font-semibold text-white transition hover:bg-white/20 disabled:opacity-40"><FiSave size={14} />Save scenario</button>
-          {!!scenarios.length && <><select value={selectedScenario} onChange={(event) => setSelectedScenario(event.target.value)} className="h-9 max-w-[180px] rounded-lg border border-white/15 bg-slate-900 px-2 text-xs text-white outline-none"><option value="">Saved scenarios</option>{scenarios.map((scenario) => <option key={scenario.id} value={scenario.id}>{scenario.name}</option>)}</select><button type="button" onClick={loadScenario} disabled={!selectedScenario} className="h-9 rounded-lg border border-white/20 bg-white/10 px-3 text-xs font-semibold text-white transition hover:bg-white/20 disabled:opacity-40">Load</button></>}
+          {!!scenarios.length && <><select value={selectedScenario} onChange={(event) => setSelectedScenario(event.target.value)} className="h-9 max-w-[180px] rounded-lg border border-white/15 bg-slate-900 px-2 text-xs text-white outline-none"><option value="">Saved scenarios</option>{scenarios.map((scenario) => <option key={scenario.id} value={scenario.id}>{scenario.name}</option>)}</select><button type="button" onClick={loadScenario} disabled={!selectedScenario} className="h-9 rounded-lg border border-white/20 bg-white/10 px-3 text-xs font-semibold text-white transition hover:bg-white/20 disabled:opacity-40">Load</button><button type="button" onClick={() => void deleteScenario()} disabled={!selectedScenario} className="inline-flex h-9 items-center gap-1 rounded-lg border border-rose-300/30 bg-rose-400/10 px-3 text-xs font-semibold text-rose-100 transition hover:bg-rose-400/20 disabled:opacity-40" aria-label="Hapus scenario terpilih"><FiTrash2 size={14} />Hapus</button></>}
           <button type="button" onClick={enableAlerts} className={`inline-flex h-9 items-center gap-1 rounded-lg border px-3 text-xs font-semibold transition ${notificationPermission === 'granted' ? 'border-emerald-300/30 bg-emerald-400/10 text-emerald-100' : 'border-white/20 bg-white/10 text-white hover:bg-white/20'}`}><FiBell size={14} />{notificationPermission === 'granted' ? 'Alerts on' : 'Enable alerts'}</button>
           <button type="button" onClick={exportMonitoring} disabled={!points.some((point) => point.report)} className="inline-flex h-9 items-center gap-1 rounded-lg border border-white/20 bg-white/10 px-3 text-xs font-semibold text-white transition hover:bg-white/20 disabled:opacity-40"><FiDownload size={14} />Export Excel</button>
           <button type="button" onClick={exportMonitoringPdf} disabled={!points.some((point) => point.report)} className="inline-flex h-9 items-center gap-1 rounded-lg border border-white/20 bg-white/10 px-3 text-xs font-semibold text-white transition hover:bg-white/20 disabled:opacity-40"><FiDownload size={14} />Export PDF</button>
