@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>IMORA Forecast API — Integration Guide</title>
+  <style>
+    @page { size: A4; margin: 17mm 16mm 16mm; }
+    * { box-sizing: border-box; }
+    body { color: #10213c; font: 10.3pt/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; margin: 0; }
+    h1,h2,h3 { color: #071a35; line-height: 1.16; margin: 0; }
+    h1 { font-size: 28pt; letter-spacing: -.8px; }
+    h2 { border-bottom: 1px solid #cfe4f3; font-size: 16pt; margin: 25px 0 10px; padding-bottom: 6px; }
+    h3 { font-size: 11.5pt; margin: 16px 0 6px; }
+    p { margin: 7px 0; } ul { margin: 7px 0 7px 20px; padding: 0; }
+    li { margin: 3px 0; }
+    .hero { background: linear-gradient(135deg,#03142d,#0a4170 65%,#18b6e5); color: white; margin: -17mm -16mm 21px; min-height: 152px; padding: 27px 16mm 24px; }
+    .eyebrow { color: #76e7ff; font-size: 9pt; font-weight: 800; letter-spacing: 2px; margin-bottom: 9px; text-transform: uppercase; }
+    .hero h1 { color:white; max-width: 560px; }
+    .hero p { color: #dbeeff; font-size: 12pt; max-width: 570px; }
+    .meta { color: #bcd8e8; font-size: 8.5pt; margin-top: 21px; }
+    .callout { background: #eaf8fe; border-left: 4px solid #12b9e9; border-radius: 4px; margin: 13px 0; padding: 10px 13px; }
+    .warning { background: #fff6e5; border-left-color: #f1a323; }
+    .endpoint { background: #061d37; border-radius: 7px; color: #edfbff; font: 9.7pt/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; margin: 9px 0 13px; padding: 12px 14px; overflow-wrap: anywhere; }
+    pre { background: #091d36; border-radius: 6px; color: #eaf8ff; font: 8.2pt/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; margin: 8px 0 14px; padding: 12px; white-space: pre-wrap; word-break: break-word; }
+    code { background: #edf4f8; border-radius: 3px; color: #124f76; font: .92em ui-monospace, SFMono-Regular, Menlo, monospace; padding: 1px 3px; }
+    pre code,.endpoint code { background: transparent; color: inherit; padding:0; }
+    table { border-collapse: collapse; margin: 9px 0 15px; width: 100%; }
+    th { background: #08365d; color:#fff; font-size: 8.8pt; text-align: left; }
+    td,th { border: 1px solid #cbdde8; padding: 7px 8px; vertical-align: top; }
+    tr:nth-child(even) td { background: #f5f9fc; }
+    .badge { background: #d9f6ff; border-radius:99px; color:#08648a; display:inline-block; font-size:8pt; font-weight:800; letter-spacing:.4px; padding:3px 8px; }
+    .footer { border-top:1px solid #cfe4f3; color:#59728c; font-size:8pt; margin-top:26px; padding-top:9px; }
+    .page-break { break-before: page; page-break-before: always; }
+  </style>
+</head>
+<body>
+  <section class="hero">
+    <div class="eyebrow">INDEXIM OPERATIONS</div>
+    <h1>IMORA Forecast API</h1>
+    <p>Panduan integrasi forecast cuaca IMORA untuk aplikasi atau server lokal.</p>
+    <div class="meta">Versi 1.0 · 19 Oktober 2026 · Untuk integrasi teknis internal</div>
+  </section>
+
+  <div class="callout"><strong>Ringkasan:</strong> endpoint ini memberikan data forecast cuaca untuk titik operasional Indexim atau koordinat yang Anda tentukan. Endpoint dapat dipanggil dari aplikasi web lokal maupun backend karena CORS sudah diaktifkan.</div>
+
+  <h2>1. Endpoint publik</h2>
+  <p><span class="badge">GET</span> Forecast seluruh titik operasional Indexim:</p>
+  <div class="endpoint">https://imora.indexim.id/api/v1/forecast</div>
+  <p>Tidak memerlukan login, API key, atau token. Respons berformat JSON.</p>
+
+  <h2>2. Data yang tersedia</h2>
+  <p>Setiap titik berisi forecast per jam untuk tiga hari secara default:</p>
+  <ul>
+    <li>Suhu udara (<code>temperature_2m</code>)</li>
+    <li>Kelembapan relatif (<code>relative_humidity_2m</code>)</li>
+    <li>Curah hujan (<code>precipitation</code>) dan probabilitas hujan</li>
+    <li>Kode kondisi cuaca WMO (<code>weather_code</code>)</li>
+    <li>Kecepatan angin dan hembusan angin (<code>wind_speed_10m</code>, <code>wind_gusts_10m</code>)</li>
+  </ul>
+  <p>Sumber data forecast: <strong>Open-Meteo</strong>. Zona waktu pada respons mengikuti titik forecast (untuk lokasi Indexim: Asia/Makassar / GMT+8).</p>
+
+  <h2>3. Request dasar</h2>
+  <h3>cURL</h3>
+  <pre><code>curl https://imora.indexim.id/api/v1/forecast</code></pre>
+  <h3>JavaScript / browser atau Node.js</h3>
+  <pre><code>const response = await fetch('https://imora.indexim.id/api/v1/forecast');
+if (!response.ok) throw new Error('Forecast tidak tersedia');
+
+const payload = await response.json();
+console.log(payload.results);</code></pre>
+
+  <h2>4. Forecast untuk koordinat sendiri</h2>
+  <p>Kirim pasangan <code>latitude</code> dan <code>longitude</code> yang dipisahkan koma. Urutan latitude harus sama dengan longitude. Maksimum 50 titik per request.</p>
+  <div class="endpoint">https://imora.indexim.id/api/v1/forecast?latitude=1.043559,-6.200000&amp;longitude=117.657709,106.800000&amp;forecast_days=7</div>
+  <table>
+    <thead><tr><th>Parameter</th><th>Wajib</th><th>Keterangan</th></tr></thead>
+    <tbody>
+      <tr><td><code>latitude</code></td><td>Untuk titik sendiri</td><td>Latitude, tunggal atau dipisahkan koma. Nilai -90 sampai 90.</td></tr>
+      <tr><td><code>longitude</code></td><td>Untuk titik sendiri</td><td>Longitude, jumlahnya harus sama dengan latitude. Nilai -180 sampai 180.</td></tr>
+      <tr><td><code>forecast_days</code></td><td>Tidak</td><td><code>3</code> (default) atau <code>7</code>.</td></tr>
+    </tbody>
+  </table>
+  <pre><code>const url = new URL('https://imora.indexim.id/api/v1/forecast');
+url.searchParams.set('latitude', '1.043559');
+url.searchParams.set('longitude', '117.657709');
+url.searchParams.set('forecast_days', '7');
+
+const { results } = await fetch(url).then((r) => r.json());
+const hourly = results[0].forecast.hourly;
+console.log(hourly.time, hourly.precipitation);</code></pre>
+
+  <div class="page-break"></div>
+  <h2>5. Struktur respons</h2>
+  <pre><code>{
+  "provider": "Open-Meteo",
+  "generated_at": "2026-10-19T09:15:34.574Z",
+  "results": [
+    {
+      "point": {
+        "name": "T2 - KPP",
+        "latitude": 1.059666,
+        "longitude": 117.664794
+      },
+      "forecast": {
+        "timezone": "Asia/Makassar",
+        "hourly_units": { "precipitation": "mm", "wind_speed_10m": "km/h" },
+        "hourly": {
+          "time": ["2026-10-19T00:00", "..."],
+          "temperature_2m": [24.1, "..."],
+          "precipitation": [0, "..."],
+          "precipitation_probability": [15, "..."],
+          "weather_code": [3, "..."],
+          "wind_speed_10m": [8.2, "..."],
+          "wind_gusts_10m": [18.4, "..."]
+        }
+      }
+    }
+  ]
+}</code></pre>
+
+  <h2>6. Cache dan pembaruan</h2>
+  <ul>
+    <li>Respons endpoint di-cache hingga <strong>5 menit</strong> agar stabil dan tidak membebani provider forecast.</li>
+    <li>Untuk integrasi rutin, panggil endpoint maksimal satu kali per lima menit per titik/kelompok titik.</li>
+    <li>Simpan <code>generated_at</code> pada sistem lokal untuk mengetahui waktu data terakhir diterima.</li>
+  </ul>
+
+  <h2>7. Penanganan error</h2>
+  <table>
+    <thead><tr><th>Status</th><th>Arti</th><th>Tindakan</th></tr></thead>
+    <tbody>
+      <tr><td>200</td><td>Forecast berhasil diambil.</td><td>Proses <code>results</code>.</td></tr>
+      <tr><td>400</td><td>Koordinat tidak valid atau jumlah latitude/longitude tidak sama.</td><td>Periksa format parameter.</td></tr>
+      <tr><td>503</td><td>Provider forecast sementara tidak tersedia.</td><td>Simpan data terakhir dan coba ulang beberapa menit kemudian.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>8. Batas keamanan data</h2>
+  <div class="callout warning"><strong>Penting:</strong> endpoint forecast ini hanya memberikan data cuaca. Endpoint tidak mengembalikan akun pengguna, scenario, polygon monitoring, notifikasi, maupun riwayat operasional user.</div>
+  <p>Jika integrasi memerlukan ekspor data milik akun tertentu, gunakan endpoint privat <code>/api/v1/data</code> dengan access token Supabase dari akun tersebut. Token tidak boleh disimpan di source code, dikirim via chat, atau dibagikan ke pihak yang tidak berwenang.</p>
+
+  <h2>9. Ringkasan untuk implementasi</h2>
+  <ol>
+    <li>Panggil <code>https://imora.indexim.id/api/v1/forecast</code> untuk seluruh titik Indexim.</li>
+    <li>Gunakan parameter koordinat bila membutuhkan titik sendiri.</li>
+    <li>Gunakan data <code>hourly</code> untuk grafik, tabel, dan rule peringatan lokal.</li>
+    <li>Simpan waktu respons dan lakukan refresh maksimal tiap lima menit.</li>
+  </ol>
+
+  <div class="footer">IMORA — Indexim Meteorological Reporting &amp; Analytics · Dokumen integrasi internal</div>
+</body>
+</html>
