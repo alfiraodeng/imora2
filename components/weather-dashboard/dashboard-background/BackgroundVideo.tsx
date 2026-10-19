@@ -12,19 +12,19 @@ export default function BackgroundVideo() {
   const cold = (temperatureC ?? Number.POSITIVE_INFINITY) <= 15;
   const hot = (temperatureC ?? Number.NEGATIVE_INFINITY) > 25;
   const video = cold
-    ? '/weather-video/dingin.mp4?v=1'
+    ? '/weather-video/optimized/dingin.mp4?v=1'
     : hot
-      ? '/weather-video/terik.mp4?v=1'
+      ? '/weather-video/optimized/terik.mp4?v=1'
     : snowy
-    ? '/weather-video/salju.mp4?v=1'
+    ? '/weather-video/optimized/salju.mp4?v=1'
     : rainy
-    ? '/weather-video/hujan.mp4?v=1'
+    ? '/weather-video/optimized/hujan.mp4?v=1'
     : cloudy
-      ? '/weather-video/mendung-berawan.mp4?v=1'
-      : '/weather-video/cerah.mp4?v=2';
+      ? '/weather-video/optimized/mendung-berawan.mp4?v=1'
+      : '/weather-video/optimized/cerah.mp4?v=1';
 
   return <>
-    <video key={video} className="absolute inset-0 z-0 h-full w-full object-cover" autoPlay muted loop playsInline preload="auto"><source src={video} type="video/mp4" /></video>
+    <video key={video} className="absolute inset-0 z-0 h-full w-full object-cover" autoPlay muted loop playsInline preload="metadata"><source src={video} type="video/mp4" /></video>
     <div className="absolute inset-0 z-0 bg-slate-950/30" />
   </>;
 }

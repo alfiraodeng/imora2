@@ -239,10 +239,15 @@ export default function Map() {
       supabase.from('imora_scenarios').select('id, name, data').order('created_at', { ascending: true }),
       supabase.from('imora_monitoring_areas').select('id, name, data').order('created_at', { ascending: true }),
     ]).then(async ([scenarioResult, areaResult]) => {
-      if (scenarioResult.data?.length) setScenarios(scenarioResult.data.map((row) => {
+      if (scenarioResult.data?.length) {
+        const loadedScenarios = scenarioResult.data.map((row) => {
         const data = row.data as Pick<Scenario, 'mode' | 'points'>;
         return { id: String(row.id), name: row.name, mode: data.mode, points: data.points };
-      }));
+        });
+        setScenarios(loadedScenarios);
+        const lastScenario = loadedScenarios[loadedScenarios.length - 1];
+        if (lastScenario?.points?.length) { setSelectedScenario(lastScenario.id); setSelectionMode(lastScenario.mode); setPoints(lastScenario.points.map((point) => ({ ...point, id: `${point.lat}-${point.lon}-${Date.now()}-${Math.random()}` }))); }
+      }
       if (areaResult.data?.length) setAreas(areaResult.data.map((row) => {
         const data = row.data as Pick<MonitoringArea, 'color' | 'vertices'>;
         return { id: String(row.id), name: row.name, color: data.color, vertices: data.vertices };
@@ -363,7 +368,9 @@ export default function Map() {
     const pending: Scenario = { id: `${Date.now()}`, name, mode: selectionMode, points: points.map(({ lat, lon, name: pointName }) => ({ lat, lon, name: pointName })) };
     const supabase = getSupabase();
     if (supabase) {
-      const { data, error } = await supabase.from('imora_scenarios').insert({ name: pending.name, data: { mode: pending.mode, points: pending.points } }).select('id').single();
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData.user) { setClickError('Sesi login tidak ditemukan. Silakan login ulang.'); return; }
+      const { data, error } = await supabase.from('imora_scenarios').insert({ owner_id: userData.user.id, name: pending.name, data: { mode: pending.mode, points: pending.points } }).select('id').single();
       if (error) { setClickError(`Scenario belum tersimpan ke cloud: ${error.message}`); return; }
       pending.id = String(data.id);
     }
