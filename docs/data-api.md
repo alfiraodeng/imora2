@@ -39,3 +39,24 @@ This endpoint intentionally cannot export every user's data. A company-wide
 server-to-server export should instead be implemented on an Indexim-controlled
 backend with an audited service-role secret, explicit administrator access, and
 logging.
+
+## Public forecast feed
+
+Forecast weather data does not contain user scenario, polygon, or account data.
+It is available without login at:
+
+```bash
+curl https://imora.indexim.id/api/v1/forecast
+```
+
+Without parameters, the response contains the forecast for all registered
+Indexim operational points. For custom points, send paired comma-separated
+coordinates (up to 50), optionally with `forecast_days=7`:
+
+```bash
+curl "https://imora.indexim.id/api/v1/forecast?latitude=1.043559,-6.2&longitude=117.657709,106.8&forecast_days=7"
+```
+
+The response is sourced from Open-Meteo and cached for five minutes. This is a
+forecast feed only; private user data remains protected by the authenticated
+export endpoint above.
