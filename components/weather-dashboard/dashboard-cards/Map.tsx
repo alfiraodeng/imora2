@@ -210,7 +210,7 @@ export default function Map() {
   const [dxfCoordinateSystem, setDxfCoordinateSystem] = useState<DxfCoordinateSystem>('utm50n');
   const [dxfFocusRequest, setDxfFocusRequest] = useState(0);
   const dxfInput = useRef<HTMLInputElement>(null);
-  const [points, setPoints] = useState<MonitoringPoint[]>([]);
+  const [points, setPoints] = useState<MonitoringPoint[]>([{ id: 'indexim-site-default', lat: INDEXIM_SITE_CENTER[0], lon: INDEXIM_SITE_CENTER[1], name: 'Indexim Site' }]);
   const [loadingReports, setLoadingReports] = useState(false);
   const [selectionMode, setSelectionMode] = useState<'single' | 'multi'>('single');
   const [scenarios, setScenarios] = useState<Scenario[]>([]);

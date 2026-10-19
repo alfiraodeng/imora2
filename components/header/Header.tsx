@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { FiLogOut, FiMapPin } from 'react-icons/fi';
 import SearchInput from './SearchInput';
 import TemperatureToggle from './TemperatureToggle';
@@ -10,6 +11,8 @@ import { getSupabase } from '@/lib/supabase';
 
 export default function Header() {
     const { lat, lon, weatherData, searchedCity } = useWeather();
+    const [userLabel, setUserLabel] = useState('');
+    useEffect(() => { void getSupabase()?.auth.getUser().then(({ data }) => setUserLabel(data.user?.email || '')); }, []);
 
     const getDisplayLocation = () => {
         if (searchedCity) return searchedCity;
@@ -50,6 +53,7 @@ export default function Header() {
 
             <div className="flex w-full items-center justify-between gap-3 xl:w-auto xl:justify-end">
                 <NotificationCenter />
+            {userLabel && <span className="hidden max-w-44 truncate rounded-xl border border-white/15 bg-slate-950/35 px-3 py-2 text-xs font-semibold text-cyan-100 lg:inline" title={userLabel}>{userLabel}</span>}
             <button type="button" onClick={() => void signOut()} className="inline-flex h-10 shrink-0 items-center gap-1 rounded-xl border border-white/15 bg-slate-950/35 px-3 text-xs font-bold text-white/85 transition hover:bg-white/10"><FiLogOut size={15} /><span className="hidden sm:inline">Log out</span></button>
             <div className="hidden min-w-[150px] select-none text-right text-sm font-light text-white/70 lg:block">
                 <span className="font-semibold tracking-[.16em] text-cyan-200">IMORA</span><br />
