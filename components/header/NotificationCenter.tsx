@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { FiAlertTriangle, FiBell, FiCheckCircle, FiCloudRain, FiLoader, FiNavigation, FiTrash2, FiWind, FiX } from 'react-icons/fi';
 import { useWeather } from '@/context/WeatherContext';
 import { type IndeximAsset } from '@/data/indexim-assets';
+import { getSupabase } from '@/lib/supabase';
 
 type Severity = 'siaga' | 'waspada';
 type AssetAlert = { id: string; asset: IndeximAsset; severity: Severity; title: string; detail: string; action: string; due: string; rain: number; gust: number };
@@ -16,6 +17,23 @@ const levelFor = (alert: MonitoringAlert): ScenarioLevel => !alert.report ? 'ama
 const rank: Record<ScenarioLevel, number> = { aman: 0, pantau: 1, waspada: 2, siaga: 3 };
 const styleFor = (level: ScenarioLevel) => level === 'siaga' ? 'border-rose-400/30 bg-rose-500/10 text-rose-200' : level === 'waspada' ? 'border-amber-300/30 bg-amber-400/10 text-amber-100' : level === 'pantau' ? 'border-cyan-300/30 bg-cyan-400/10 text-cyan-100' : 'border-emerald-300/25 bg-emerald-400/10 text-emerald-100';
 const labelFor = (level: ScenarioLevel) => level === 'aman' ? 'AMAN' : level.toUpperCase();
+const scenarioKey = (alert: MonitoringAlert) => `${alert.lat.toFixed(5)}:${alert.lon.toFixed(5)}:${levelFor(alert)}:${alert.report?.summary || ''}`;
+
+async function saveScenarioNotifications(scenarioName: string, alerts: MonitoringAlert[]) {
+  const client = getSupabase(); if (!client || !alerts.length) return;
+  const { data: userData } = await client.auth.getUser(); if (!userData.user) return;
+  const now = new Date().toISOString();
+  await client.from('imora_notifications').upsert(alerts.map((alert) => ({
+    owner_id: userData.user.id,
+    fingerprint: `scenario:${scenarioKey(alert)}`,
+    category: 'scenario',
+    severity: levelFor(alert),
+    title: `${labelFor(levelFor(alert))} · ${alert.name}`,
+    detail: `${alert.report?.summary || 'Perubahan cuaca terdeteksi'} · ${alert.report?.metrics || ''}`,
+    data: { scenarioName, alert },
+    updated_at: now,
+  })), { onConflict: 'owner_id,fingerprint' });
+}
 
 export default function NotificationCenter() {
   const { setCoordinates, updatedAt } = useWeather();
@@ -47,11 +65,13 @@ export default function NotificationCenter() {
     const receive = (event: Event) => {
       const payload = (event as CustomEvent<MonitoringPayload>).detail;
       if (!payload?.alerts) return;
-      const notifiable = payload.alerts.filter((alert) => levelFor(alert) !== 'aman' && !dismissedScenarioKeys.current.has(`${alert.id}:${levelFor(alert)}:${alert.report?.summary || ''}`));
+      const activeAlerts = payload.alerts.filter((alert) => levelFor(alert) !== 'aman');
+      void saveScenarioNotifications(payload.scenarioName, activeAlerts);
+      const notifiable = activeAlerts.filter((alert) => !dismissedScenarioKeys.current.has(scenarioKey(alert)));
       setScenarioName(payload.scenarioName); setScenarioAlerts(notifiable); setScenarioCheckedAt(payload.checkedAt);
       const ordered = [...notifiable].sort((a, b) => rank[levelFor(b)] - rank[levelFor(a)]);
       const lead = ordered[0]; const level = lead ? levelFor(lead) : 'aman';
-      const signature = notifiable.map((alert) => `${alert.id}:${levelFor(alert)}:${alert.report?.summary || ''}`).join('|');
+      const signature = notifiable.map(scenarioKey).join('|');
       if (signature === scenarioSignature.current) return;
       scenarioSignature.current = signature;
       if (!lead) return;
@@ -67,7 +87,12 @@ export default function NotificationCenter() {
   useEffect(() => { if (!popup) return; const timer = window.setTimeout(() => setPopup(null), 8_000); return () => window.clearTimeout(timer); }, [popup]);
 
   const enableBrowserAlerts = async () => { if (typeof Notification !== 'undefined') await Notification.requestPermission(); };
-  const clearAlerts = () => { alerts.forEach((alert) => dismissedAssetIds.current.add(alert.id)); scenarioAlerts.forEach((alert) => dismissedScenarioKeys.current.add(`${alert.id}:${levelFor(alert)}:${alert.report?.summary || ''}`)); setAlerts([]); setScenarioAlerts([]); setPopup(null); };
+  const clearAlerts = async () => {
+    alerts.forEach((alert) => dismissedAssetIds.current.add(alert.id)); scenarioAlerts.forEach((alert) => dismissedScenarioKeys.current.add(scenarioKey(alert)));
+    const client = getSupabase(); const fingerprints = scenarioAlerts.map((alert) => `scenario:${scenarioKey(alert)}`);
+    if (client && fingerprints.length) { const { data: userData } = await client.auth.getUser(); if (userData.user) await client.from('imora_notifications').update({ is_dismissed: true, dismissed_at: new Date().toISOString() }).eq('owner_id', userData.user.id).in('fingerprint', fingerprints); }
+    setAlerts([]); setScenarioAlerts([]); setPopup(null);
+  };
   const critical = alerts.filter((alert) => alert.severity === 'siaga').length + scenarioAlerts.filter((alert) => levelFor(alert) === 'siaga').length;
   const attention = alerts.length + scenarioAlerts.filter((alert) => levelFor(alert) !== 'aman').length;
   const badge = critical || attention;
