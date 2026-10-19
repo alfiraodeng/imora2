@@ -349,6 +349,18 @@ export default function Map() {
         updated.forEach((point) => { if (point.report) { const key = `${point.lat.toFixed(4)},${point.lon.toFixed(4)}`; next[key] = [...(next[key] || []).filter((item) => item.at >= cutoff), { at: Date.now(), level: point.report.level }].slice(-24); } });
         const client = getSupabase(); if (client) void client.from('imora_status_history').insert({ data: { type: 'monitoring-history', values: next } }); return next;
       });
+      const scenarioLabel = scenarios.find((scenario) => scenario.id === selectedScenario)?.name || 'Titik operasional aktif';
+      window.dispatchEvent(new CustomEvent('imora:monitoring-alerts', { detail: {
+        scenarioName: scenarioLabel,
+        checkedAt: Date.now(),
+        alerts: updated.map((point, index) => ({
+          id: point.id,
+          name: point.name || `Titik ${index + 1}`,
+          lat: point.lat,
+          lon: point.lon,
+          report: point.report,
+        })),
+      } }));
       const siagaIds = new Set(updated.filter((point) => point.report?.level === 'Siaga').map((point) => point.id));
       for (const id of notifiedSiaga.current) if (!siagaIds.has(id)) notifiedSiaga.current.delete(id);
       if (notificationPermission === 'granted') {
@@ -361,7 +373,7 @@ export default function Map() {
       }
     } catch (error) { console.error(error); setClickError('Forecast multi-titik belum dapat dimuat. Coba lagi.'); }
     finally { setLoadingReports(false); }
-  }, [notificationPermission, points]);
+  }, [notificationPermission, points, scenarios, selectedScenario]);
 
   // Overview is operational by default: whenever the active scenario's point
   // coordinates arrive from the database (or are changed), fetch its forecast
