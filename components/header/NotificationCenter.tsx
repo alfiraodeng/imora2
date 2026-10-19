@@ -65,7 +65,12 @@ export default function NotificationCenter() {
     const receive = (event: Event) => {
       const payload = (event as CustomEvent<MonitoringPayload>).detail;
       if (!payload?.alerts) return;
-      const activeAlerts = payload.alerts.filter((alert) => levelFor(alert) !== 'aman');
+      // "Pantau" is routine forecast context, not an alert. Only surface
+      // weather that needs action in the bell, pop-up, or browser notification.
+      const activeAlerts = payload.alerts.filter((alert) => {
+        const level = levelFor(alert);
+        return level === 'waspada' || level === 'siaga';
+      });
       void saveScenarioNotifications(payload.scenarioName, activeAlerts);
       const notifiable = activeAlerts.filter((alert) => !dismissedScenarioKeys.current.has(scenarioKey(alert)));
       setScenarioName(payload.scenarioName); setScenarioAlerts(notifiable); setScenarioCheckedAt(payload.checkedAt);
