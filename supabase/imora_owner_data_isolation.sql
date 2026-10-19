@@ -18,6 +18,14 @@ create policy "imora_areas_read_own"
 on public.imora_monitoring_areas for select to authenticated
 using (owner_id = auth.uid());
 
+-- Keep create/update/delete limited to the same owner as well. This is needed
+-- for Clear polygons to persist after a new login.
+drop policy if exists "imora_areas_owner_write" on public.imora_monitoring_areas;
+create policy "imora_areas_owner_write"
+on public.imora_monitoring_areas for all to authenticated
+using (owner_id = auth.uid())
+with check (owner_id = auth.uid());
+
 drop policy if exists "imora_history_logged_in_read" on public.imora_status_history;
 drop policy if exists "imora_history_read_own" on public.imora_status_history;
 create policy "imora_history_read_own"
