@@ -228,6 +228,9 @@ export default function Map() {
   const [workspaceMode, setWorkspaceMode] = useState<'view' | 'pro'>('view');
   const mapShell = useRef<HTMLDivElement>(null);
   const notifiedSiaga = useRef(new Set<string>());
+  const pointsKey = points.map((point) => `${point.lat.toFixed(6)},${point.lon.toFixed(6)}`).join('|');
+  const latestPointsKey = useRef(pointsKey);
+  latestPointsKey.current = pointsKey;
 
   const position = lat !== null && lon !== null ? ([lat, lon] as [number, number]) : null;
 
@@ -326,6 +329,7 @@ export default function Map() {
 
   const applyMonitoring = useCallback(async () => {
     if (!points.length) { setClickError('Klik peta untuk menambahkan titik pemantauan.'); return; }
+    const requestPointsKey = points.map((point) => `${point.lat.toFixed(6)},${point.lon.toFixed(6)}`).join('|');
     setLoadingReports(true); setClickError('');
     try {
       // Open-Meteo accepts coordinate lists, so multi-point monitoring has no
@@ -335,6 +339,9 @@ export default function Map() {
       if (!response.ok) throw new Error('Forecast request failed');
       const result = await response.json(); const batches = Array.isArray(result) ? result : [result];
       const updated = points.map((point, index) => ({ ...point, report: batches[index] ? makeReport(batches[index]) : point.report }));
+      // A saved scenario can load while an older default-point request is in
+      // flight. Never let that old response replace the active scenario.
+      if (latestPointsKey.current !== requestPointsKey) return;
       setPoints(updated);
       setHistory((current) => {
         const cutoff = Date.now() - 24 * 60 * 60 * 1000;
@@ -355,6 +362,14 @@ export default function Map() {
     } catch (error) { console.error(error); setClickError('Forecast multi-titik belum dapat dimuat. Coba lagi.'); }
     finally { setLoadingReports(false); }
   }, [notificationPermission, points]);
+
+  // Overview is operational by default: whenever the active scenario's point
+  // coordinates arrive from the database (or are changed), fetch its forecast
+  // immediately. Users should never have to reopen Multi point or press Apply
+  // just to see the saved scenario's status.
+  useEffect(() => {
+    if (pointsKey) void applyMonitoring();
+  }, [pointsKey]); // geometry only; report updates must not trigger another request
 
   useEffect(() => {
     if (!points.length) return;
@@ -531,6 +546,17 @@ export default function Map() {
         {!!points.length && <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{points.map((point, index) => <article key={`${point.id}-card`} className="rounded-xl border border-white/10 bg-white/5 p-3 text-xs text-white/75"><div className="flex items-start justify-between gap-2"><div className="min-w-0 flex-1"><input value={point.name || ''} onChange={(event) => setPoints((current) => current.map((item) => item.id === point.id ? { ...item, name: event.target.value } : item))} placeholder={`Titik ${index + 1}`} className="w-full border-b border-white/15 bg-transparent pb-1 font-semibold text-white outline-none placeholder:text-white/50 focus:border-cyan-200" /><p className="mt-1 text-white/50">{point.lat.toFixed(3)}, {point.lon.toFixed(3)}</p><button type="button" onClick={() => setCoordinates(point.lat, point.lon, point.name || `Titik ${index + 1}`)} className="mt-2 rounded-md border border-cyan-200/25 bg-cyan-300/10 px-2 py-1 text-[10px] font-semibold text-cyan-100 hover:bg-cyan-300/20">Lihat Outlook 12 Bulan</button></div><button onClick={() => setPoints((current) => current.filter((item) => item.id !== point.id))} className="text-white/55 hover:text-rose-300" aria-label={`Hapus titik ${index + 1}`}><FiTrash2 size={15} /></button></div>{point.report ? <div className="mt-2"><p className={`flex items-center gap-1 font-bold ${point.report.level === 'Siaga' ? 'text-rose-300' : point.report.level === 'Waspada' ? 'text-amber-200' : 'text-emerald-200'}`}>{point.report.level === 'Normal' ? <FiCheckCircle /> : <FiAlertTriangle />}{point.report.level} · {point.report.summary}</p><p className="mt-1">Puncak: {formatTime(point.report.time)} · {point.report.metrics}</p><p className="mt-1 text-cyan-100">{point.report.flood}</p><p className="mt-1 text-white/55">Aksi: {point.report.action}</p></div> : <p className="mt-2 text-white/50">Belum diterapkan.</p>}</article>)}</div>}
         {!!points.some((point) => history[`${point.lat.toFixed(4)},${point.lon.toFixed(4)}`]?.length) && <div className="mt-3 rounded-xl border border-white/10 bg-white/5 p-3 text-xs"><p className="font-semibold text-white">Riwayat status (24 jam terakhir)</p><div className="mt-2 flex flex-wrap gap-2">{points.map((point, index) => { const entries = history[`${point.lat.toFixed(4)},${point.lon.toFixed(4)}`] || []; return entries.length ? <span key={point.id} className="rounded-lg bg-slate-950/30 px-2 py-1 text-white/70">{point.name || `Titik ${index + 1}`}: {entries.slice(-4).map((entry) => `${new Date(entry.at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} ${entry.level}`).join(' → ')}</span> : null; })}</div></div>}
         <p className="mt-3 text-[10px] leading-relaxed text-white/40">Screening preventif berbasis forecast model, bukan peringatan dini resmi. Ikuti peringatan BMKG dan otoritas setempat untuk keputusan keselamatan.</p>
+      </section>}
+
+      {workspaceMode === 'view' && !!points.length && <section className="mt-4 rounded-2xl border border-white/15 bg-slate-950/35 p-4 shadow-lg backdrop-blur-md sm:p-5">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div><p className="flex items-center gap-2 text-sm font-semibold text-white"><FiMapPin className="text-cyan-200" /> Forecast titik tersimpan</p><p className="mt-1 text-xs text-white/55">{selectedScenario ? `Scenario aktif: ${scenarios.find((scenario) => scenario.id === selectedScenario)?.name || 'Tersimpan'}` : 'Forecast titik operasional aktif'} · pembaruan otomatis setiap 10 menit.</p></div>
+          {loadingReports && <span className="inline-flex items-center gap-1.5 text-xs text-cyan-100"><FiLoader className="animate-spin" /> Memuat forecast…</span>}
+        </div>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {points.map((point, index) => <article key={`${point.id}-overview-card`} className="rounded-xl border border-white/10 bg-white/5 p-3 text-xs text-white/75"><div className="flex items-start justify-between gap-2"><div><p className="font-semibold text-white">{point.name || `Titik ${index + 1}`}</p><p className="mt-1 text-white/45">{point.lat.toFixed(3)}, {point.lon.toFixed(3)}</p></div>{point.report && <span className={`rounded-full px-2 py-1 text-[10px] font-bold ${point.report.level === 'Siaga' ? 'bg-rose-400/15 text-rose-200' : point.report.level === 'Waspada' ? 'bg-amber-400/15 text-amber-100' : 'bg-emerald-400/15 text-emerald-100'}`}>{point.report.level}</span>}</div>{point.report ? <div className="mt-3"><p className="font-semibold text-white">{point.report.summary}</p><p className="mt-1">Puncak: {formatTime(point.report.time)} · {point.report.metrics}</p><p className="mt-2 text-cyan-100">{point.report.action}</p></div> : <p className="mt-3 text-white/50">Forecast sedang disiapkan…</p>}</article>)}
+        </div>
+        <p className="mt-3 text-[10px] leading-relaxed text-white/40">Screening preventif berbasis forecast model, bukan peringatan dini resmi.</p>
       </section>}
 
       {clickError && <Toast message={clickError} />}
