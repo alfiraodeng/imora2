@@ -49,7 +49,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
   const configured = Boolean(getSupabase());
 
   return <main className="relative min-h-screen overflow-hidden bg-[#06162b] text-slate-950">
-    <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: "url('/imora-login-weather-hero.png')" }} />
+    <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: "url('/imora-login-weather-hero.webp')" }} />
     <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(1,11,28,.88)_0%,rgba(2,20,43,.59)_45%,rgba(241,248,255,.18)_100%)]" />
     <header className="relative z-10 flex items-center justify-between border-b border-white/20 bg-slate-950/45 px-5 py-4 text-white backdrop-blur-md sm:px-8"><div className="flex items-center gap-3"><span className="grid h-8 w-10 place-items-center rounded-xl bg-sky-400 text-lg text-slate-950"><FiCloudRain /></span><b className="text-xl tracking-tight sm:text-2xl">IMORA <span className="text-sky-300">2.0</span></b><span className="hidden border-l border-white/30 pl-4 text-[10px] font-bold tracking-[.2em] text-white/75 sm:inline">INDEXIM METEOROLOGICAL REPORTING &amp; ANALYTICS</span></div><span className="hidden text-xs font-medium text-white/75 md:inline">Operational weather intelligence</span></header>
     <div className="relative z-10 mx-auto grid min-h-[calc(100vh-65px)] max-w-[1800px] items-center gap-10 px-5 py-8 lg:grid-cols-[1.2fr_.8fr] lg:px-12 xl:px-16">
