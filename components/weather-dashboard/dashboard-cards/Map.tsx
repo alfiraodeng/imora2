@@ -31,6 +31,25 @@ type DxfCoordinateSystem = 'utm50n' | 'wgs84';
 type DxfFeature = { id: string; kind: 'line' | 'polygon'; positions: Array<[number, number]> };
 type DxfLayer = { id: string; name: string; color: string; coordinateSystem: DxfCoordinateSystem; features: DxfFeature[] };
 
+async function saveForecastHistory(scenarioName: string, points: MonitoringPoint[]) {
+  const reports = points.filter((point): point is MonitoringPoint & { report: RiskReport } => Boolean(point.report));
+  const client = getSupabase(); if (!client || !reports.length) return;
+  const { data: userData } = await client.auth.getUser(); if (!userData.user) return;
+  const capturedAt = new Date().toISOString();
+  await client.from('imora_forecast_history').insert(reports.map((point) => ({
+    owner_id: userData.user.id,
+    scenario_name: scenarioName,
+    point_name: point.name || 'Titik tanpa nama',
+    latitude: point.lat,
+    longitude: point.lon,
+    captured_at: capturedAt,
+    forecast_peak_at: point.report.time,
+    risk_level: point.report.level,
+    summary: point.report.summary,
+    data: point.report,
+  })));
+}
+
 // Custom pin icon
 const pinIcon = new L.DivIcon({
   html: '<div style="font-size: 24px;">📍</div>',
@@ -350,6 +369,7 @@ export default function Map() {
         const client = getSupabase(); if (client) void client.from('imora_status_history').insert({ data: { type: 'monitoring-history', values: next } }); return next;
       });
       const scenarioLabel = scenarios.find((scenario) => scenario.id === selectedScenario)?.name || 'Titik operasional aktif';
+      void saveForecastHistory(scenarioLabel, updated);
       window.dispatchEvent(new CustomEvent('imora:monitoring-alerts', { detail: {
         scenarioName: scenarioLabel,
         checkedAt: Date.now(),
