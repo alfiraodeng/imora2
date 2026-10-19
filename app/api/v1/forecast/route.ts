@@ -4,6 +4,11 @@ import { INDEXIM_SITE_ASSETS } from '@/data/indexim-assets';
 export const dynamic = 'force-dynamic';
 
 const HOURLY_FIELDS = 'temperature_2m,relative_humidity_2m,precipitation,precipitation_probability,weather_code,wind_speed_10m,wind_gusts_10m';
+const publicHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, OPTIONS',
+  'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=60',
+};
 
 function numberList(value: string | null) {
   if (!value) return null;
@@ -20,9 +25,9 @@ export async function GET(request: NextRequest) {
   if (!latitude && !longitude) {
     points = INDEXIM_SITE_ASSETS.map((asset) => ({ name: asset.name, latitude: asset.lat, longitude: asset.lon }));
   } else if (!latitude || !longitude || latitude.length !== longitude.length || latitude.length > 50) {
-    return NextResponse.json({ error: 'Use matching comma-separated latitude and longitude values (maximum 50 points).' }, { status: 400 });
+    return NextResponse.json({ error: 'Use matching comma-separated latitude and longitude values (maximum 50 points).' }, { status: 400, headers: publicHeaders });
   } else if (latitude.some((value) => value < -90 || value > 90) || longitude.some((value) => value < -180 || value > 180)) {
-    return NextResponse.json({ error: 'Latitude or longitude is outside its valid range.' }, { status: 400 });
+    return NextResponse.json({ error: 'Latitude or longitude is outside its valid range.' }, { status: 400, headers: publicHeaders });
   } else {
     points = latitude.map((value, index) => ({ name: `Point ${index + 1}`, latitude: value, longitude: longitude[index] }));
   }
@@ -41,9 +46,13 @@ export async function GET(request: NextRequest) {
     const forecast = await response.json();
     const results = (Array.isArray(forecast) ? forecast : [forecast]).map((item, index) => ({ point: points[index], forecast: item }));
     return NextResponse.json({ provider: 'Open-Meteo', generated_at: new Date().toISOString(), results }, {
-      headers: { 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=60' },
+      headers: publicHeaders,
     });
   } catch {
-    return NextResponse.json({ error: 'Forecast provider is temporarily unavailable.' }, { status: 503, headers: { 'Cache-Control': 'no-store' } });
+    return NextResponse.json({ error: 'Forecast provider is temporarily unavailable.' }, { status: 503, headers: { ...publicHeaders, 'Cache-Control': 'no-store' } });
   }
+}
+
+export function OPTIONS() {
+  return new NextResponse(null, { status: 204, headers: publicHeaders });
 }
