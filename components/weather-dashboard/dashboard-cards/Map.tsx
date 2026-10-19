@@ -14,6 +14,7 @@ import {
   Popup,
 } from 'react-leaflet';
 import { useWeather } from '@/context/WeatherContext';
+import { getSupabase } from '@/lib/supabase';
 import { INDEXIM_SITE_ASSETS, INDEXIM_SITE_CENTER, type IndeximAsset } from '@/data/indexim-assets';
 import { useState, useEffect, useCallback, useRef, type ChangeEvent } from 'react';
 import L from 'leaflet';
@@ -235,6 +236,21 @@ export default function Map() {
     if (saved) { try { setScenarios(JSON.parse(saved)); } catch { window.localStorage.removeItem('imora-monitoring-scenarios'); } }
     if ('Notification' in window) setNotificationPermission(Notification.permission);
     try { const storedHistory = window.localStorage.getItem('imora-status-history'); if (storedHistory) setHistory(JSON.parse(storedHistory)); const storedAreas = window.localStorage.getItem('imora-monitoring-areas'); if (storedAreas) setAreas(JSON.parse(storedAreas)); } catch { /* use defaults */ }
+    const supabase = getSupabase();
+    if (!supabase) return;
+    void Promise.all([
+      supabase.from('imora_scenarios').select('id, name, data').order('created_at', { ascending: true }),
+      supabase.from('imora_monitoring_areas').select('id, name, data').order('created_at', { ascending: true }),
+    ]).then(([scenarioResult, areaResult]) => {
+      if (scenarioResult.data?.length) setScenarios(scenarioResult.data.map((row) => {
+        const data = row.data as Pick<Scenario, 'mode' | 'points'>;
+        return { id: String(row.id), name: row.name, mode: data.mode, points: data.points };
+      }));
+      if (areaResult.data?.length) setAreas(areaResult.data.map((row) => {
+        const data = row.data as Pick<MonitoringArea, 'color' | 'vertices'>;
+        return { id: String(row.id), name: row.name, color: data.color, vertices: data.vertices };
+      }));
+    });
   }, []);
 
   const persistScenarios = (next: Scenario[]) => {
@@ -260,9 +276,16 @@ export default function Map() {
     });
   };
 
-  const saveArea = () => {
+  const saveArea = async () => {
     if (areaVertices.length < 3) { setClickError('Area polygon memerlukan minimal 3 titik sudut.'); return; }
-    const next = [...areas, { id: `${Date.now()}`, name: areaName.trim() || `Area ${areas.length + 1}`, color: areaColor, vertices: areaVertices }];
+    const pending = { id: `${Date.now()}`, name: areaName.trim() || `Area ${areas.length + 1}`, color: areaColor, vertices: areaVertices };
+    const supabase = getSupabase();
+    if (supabase) {
+      const { data, error } = await supabase.from('imora_monitoring_areas').insert({ name: pending.name, latitude: pending.vertices[0][0], longitude: pending.vertices[0][1], data: { color: pending.color, vertices: pending.vertices } }).select('id').single();
+      if (error) { setClickError(`Area belum tersimpan ke cloud: ${error.message}`); return; }
+      pending.id = String(data.id);
+    }
+    const next = [...areas, pending];
     setAreas(next); window.localStorage.setItem('imora-monitoring-areas', JSON.stringify(next)); setAreaVertices([]); setAreaName(''); setDrawingArea(false);
   };
 
@@ -335,10 +358,17 @@ export default function Map() {
     return () => window.clearInterval(refresh);
   }, [applyMonitoring, points.length]);
 
-  const saveScenario = () => {
+  const saveScenario = async () => {
     if (!points.length) { setClickError('Tambahkan minimal satu titik sebelum menyimpan scenario.'); return; }
     const name = scenarioName.trim() || `Scenario ${scenarios.length + 1}`;
-    const next = [...scenarios, { id: `${Date.now()}`, name, mode: selectionMode, points: points.map(({ lat, lon, name: pointName }) => ({ lat, lon, name: pointName })) }];
+    const pending: Scenario = { id: `${Date.now()}`, name, mode: selectionMode, points: points.map(({ lat, lon, name: pointName }) => ({ lat, lon, name: pointName })) };
+    const supabase = getSupabase();
+    if (supabase) {
+      const { data, error } = await supabase.from('imora_scenarios').insert({ name: pending.name, data: { mode: pending.mode, points: pending.points } }).select('id').single();
+      if (error) { setClickError(`Scenario belum tersimpan ke cloud: ${error.message}`); return; }
+      pending.id = String(data.id);
+    }
+    const next = [...scenarios, pending];
     persistScenarios(next); setScenarioName(''); setSelectedScenario(next[next.length - 1].id);
   };
 
