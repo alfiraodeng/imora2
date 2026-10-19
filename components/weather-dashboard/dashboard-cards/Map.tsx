@@ -111,11 +111,12 @@ function parseDxf(text: string, coordinateSystem: DxfCoordinateSystem): DxfFeatu
 }
 
 // Updates weather context when user clicks on map
-function LocationClickHandler({ setClickError, onPointAdded, drawingArea }: { setClickError: (msg: string) => void; onPointAdded: (lat: number, lon: number) => void; drawingArea: boolean }) {
+function LocationClickHandler({ setClickError, onPointAdded, drawingArea, enabled }: { setClickError: (msg: string) => void; onPointAdded: (lat: number, lon: number) => void; drawingArea: boolean; enabled: boolean }) {
   const { setCoordinates } = useWeather();
 
   useMapEvents({
     click: async (e) => {
+      if (!enabled) return;
       setClickError('');
 
       const { lat, lng } = e.latlng;
@@ -223,6 +224,7 @@ export default function Map() {
   const [areaColor, setAreaColor] = useState('#8b5cf6');
   const [toolPosition, setToolPosition] = useState({ x: 12, y: 66 });
   const [toolsOpen, setToolsOpen] = useState(false);
+  const [workspaceMode, setWorkspaceMode] = useState<'view' | 'pro'>('view');
   const mapShell = useRef<HTMLDivElement>(null);
   const notifiedSiaga = useRef(new Set<string>());
 
@@ -383,29 +385,38 @@ export default function Map() {
 
   const riskCounts = points.reduce((counts, point) => { if (point.report) counts[point.report.level] += 1; return counts; }, { Normal: 0, Waspada: 0, Siaga: 0 });
   const mostRisky = points.find((point) => point.report?.level === 'Siaga') || points.find((point) => point.report?.level === 'Waspada');
+  const changeWorkspaceMode = (mode: 'view' | 'pro') => {
+    setWorkspaceMode(mode);
+    setToolsOpen(mode === 'pro');
+    if (mode === 'view') setDrawingArea(false);
+  };
 
   return (
     <>
       <div ref={mapShell} className="relative h-[280px] w-full overflow-hidden rounded-2xl border border-white/20 shadow-lg sm:h-[340px] md:h-[400px]">
-        <div className="absolute right-3 top-3 z-[1000] flex overflow-hidden rounded-lg border border-white/30 bg-slate-950/80 text-xs text-white shadow-lg backdrop-blur">
+        <div className="absolute right-3 top-3 z-[1002] flex overflow-hidden rounded-lg border border-white/30 bg-slate-950/85 text-xs text-white shadow-lg backdrop-blur">
+          <button type="button" onClick={() => changeWorkspaceMode('view')} className={`px-3 py-2 font-semibold transition ${workspaceMode === 'view' ? 'bg-white text-slate-900' : 'hover:bg-white/15'}`}>View</button>
+          <button type="button" onClick={() => changeWorkspaceMode('pro')} className={`px-3 py-2 font-semibold transition ${workspaceMode === 'pro' ? 'bg-cyan-300 text-slate-950' : 'hover:bg-white/15'}`}>Pro</button>
+        </div>
+        {workspaceMode === 'pro' && <div className="absolute right-3 top-14 z-[1000] flex overflow-hidden rounded-lg border border-white/30 bg-slate-950/80 text-xs text-white shadow-lg backdrop-blur">
           <button onClick={() => setMapMode('dark')} className={`px-3 py-2 transition ${mapMode === 'dark' ? 'bg-white text-slate-900' : 'hover:bg-white/15'}`}>Map</button>
           <button onClick={() => setMapMode('satellite')} className={`px-3 py-2 transition ${mapMode === 'satellite' ? 'bg-white text-slate-900' : 'hover:bg-white/15'}`}>Satellite</button>
-        </div>
-        <div className="absolute left-3 top-3 z-[1000] flex overflow-hidden rounded-lg border border-cyan-100/30 bg-slate-950/85 text-xs text-white shadow-lg backdrop-blur">
+        </div>}
+        {workspaceMode === 'pro' && <div className="absolute left-3 top-3 z-[1000] flex overflow-hidden rounded-lg border border-cyan-100/30 bg-slate-950/85 text-xs text-white shadow-lg backdrop-blur">
           <button type="button" onClick={() => { setShowIndeximAssets(true); setIndeximFocusRequest((current) => current + 1); }} className="px-3 py-2 font-bold text-cyan-100 transition hover:bg-cyan-300/15">INDEXIM SITE</button>
           {showIndeximAssets && <button type="button" onClick={() => setShowIndeximAssets(false)} className="border-l border-white/15 px-2.5 py-2 text-white/65 transition hover:bg-white/10 hover:text-white" aria-label="Sembunyikan aset Indexim">×</button>}
-        </div>
-        <div className="absolute left-3 top-14 z-[1000] w-[216px] overflow-hidden rounded-xl border border-white/20 bg-slate-950/85 text-xs text-white shadow-xl backdrop-blur-md">
+        </div>}
+        {workspaceMode === 'pro' && <div className="absolute left-3 top-14 z-[1000] w-[216px] overflow-hidden rounded-xl border border-white/20 bg-slate-950/85 text-xs text-white shadow-xl backdrop-blur-md">
           <div className="flex items-center justify-between border-b border-white/10 px-3 py-2"><span className="flex items-center gap-1.5 font-bold text-white"><FiLayers className="text-violet-200" /> CAD / DXF layers</span><span className="text-[10px] text-white/45">{dxfLayers.length}</span></div>
           <div className="p-2"><select value={dxfCoordinateSystem} onChange={(event) => setDxfCoordinateSystem(event.target.value as DxfCoordinateSystem)} className="h-8 w-full rounded-md border border-white/15 bg-slate-900 px-2 text-[10px] text-white outline-none"><option value="utm50n">UTM 50N · EPSG:32650</option><option value="wgs84">WGS84 longitude / latitude</option></select><div className="mt-2 grid grid-cols-2 gap-1.5"><button type="button" onClick={() => dxfInput.current?.click()} className="inline-flex items-center justify-center gap-1 rounded-lg bg-violet-300 px-2 py-2 text-[10px] font-bold text-slate-950 transition hover:bg-violet-200"><FiUpload size={12} /> Import DXF</button><button type="button" onClick={loadDxfDemo} className="rounded-lg border border-white/15 px-2 py-2 text-[10px] font-semibold text-white/85 transition hover:bg-white/10">Load demo</button></div><input ref={dxfInput} type="file" accept=".dxf,application/dxf" onChange={importDxf} className="hidden" /><p className="mt-2 text-[9px] leading-relaxed text-white/45">DXF diproses lokal di browser. Sistem koordinat harus sesuai file CAD.</p></div>
           {!!dxfLayers.length && <div className="max-h-20 space-y-1 overflow-y-auto border-t border-white/10 p-2">{dxfLayers.map((layer) => <div key={layer.id} className="flex items-center gap-1.5 rounded-md bg-white/5 px-2 py-1 text-[10px]"><i className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: layer.color }} /><span className="min-w-0 flex-1 truncate">{layer.name}</span><span className="text-white/40">{layer.features.length}</span><button type="button" onClick={() => setDxfLayers((current) => current.filter((item) => item.id !== layer.id))} className="text-white/45 hover:text-rose-300" aria-label={`Hapus layer ${layer.name}`}>×</button></div>)}</div>}
-        </div>
-        <button type="button" onClick={() => setToolsOpen((open) => !open)} className="absolute right-3 top-16 z-[1001] rounded-xl border border-white/25 bg-slate-950/85 px-3 py-2 text-xs font-bold text-white shadow-lg backdrop-blur-md sm:hidden">{toolsOpen ? 'Close tools' : '☰ Tools'}</button>
-        <div className="pointer-events-none absolute bottom-7 left-3 z-[1000] max-w-[240px] rounded-xl border border-white/20 bg-slate-950/80 px-3 py-2 text-[10px] leading-relaxed text-white/80 shadow-lg backdrop-blur-md sm:text-xs">
+        </div>}
+        {workspaceMode === 'pro' && <button type="button" onClick={() => setToolsOpen((open) => !open)} className="absolute right-3 top-28 z-[1001] rounded-xl border border-white/25 bg-slate-950/85 px-3 py-2 text-xs font-bold text-white shadow-lg backdrop-blur-md sm:hidden">{toolsOpen ? 'Close tools' : '☰ Tools'}</button>}
+        {workspaceMode === 'pro' && <div className="pointer-events-none absolute bottom-7 left-3 z-[1000] max-w-[240px] rounded-xl border border-white/20 bg-slate-950/80 px-3 py-2 text-[10px] leading-relaxed text-white/80 shadow-lg backdrop-blur-md sm:text-xs">
           <span className="font-semibold text-cyan-200">Area referensi forecast: ±10 km</span>
           <span className="block text-white/60">Estimasi grid model di titik pilihan; kondisi lokal dapat berbeda.</span>
-        </div>
-        <div className={`absolute z-[1000] w-[208px] overflow-hidden rounded-xl border border-white/25 bg-slate-950/85 text-xs text-white shadow-xl backdrop-blur-md ${toolsOpen ? 'block' : 'hidden'} sm:block`} style={{ left: toolPosition.x, top: toolPosition.y }}>
+        </div>}
+        {workspaceMode === 'pro' && <div className={`absolute z-[1000] w-[208px] overflow-hidden rounded-xl border border-white/25 bg-slate-950/85 text-xs text-white shadow-xl backdrop-blur-md ${toolsOpen ? 'block' : 'hidden'} sm:block`} style={{ left: toolPosition.x, top: toolPosition.y }}>
           <div onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={(event) => { if (event.currentTarget.hasPointerCapture(event.pointerId)) moveToolDock(event); }} className="cursor-grab border-b border-white/10 px-3 py-2 text-[10px] font-bold tracking-[.14em] text-cyan-100 active:cursor-grabbing">⋮⋮ DRAG TOOLS</div>
           <div className="grid gap-1 p-1.5">
             <button type="button" onClick={() => { setSelectionMode('single'); setPoints([]); setToolsOpen(false); }} className={`rounded-lg px-2 py-2 text-left font-semibold transition ${selectionMode === 'single' && !drawingArea ? 'bg-white text-slate-950' : 'hover:bg-white/10'}`}>● Single point</button>
@@ -414,7 +425,7 @@ export default function Map() {
             {drawingArea && <div className="mt-1 border-t border-white/10 pt-2"><input value={areaName} onChange={(event) => setAreaName(event.target.value)} placeholder="Nama area polygon" className="h-8 w-full rounded-md border border-white/15 bg-slate-950/40 px-2 text-xs text-white outline-none placeholder:text-white/35" /><div className="mt-2 flex items-center justify-between gap-1"><div className="flex gap-1">{['#8b5cf6', '#06b6d4', '#10b981', '#f59e0b', '#f43f5e'].map((color) => <button key={color} type="button" onClick={() => setAreaColor(color)} className={`h-4 w-4 rounded-full ${areaColor === color ? 'ring-2 ring-white' : ''}`} style={{ backgroundColor: color }} />)}</div><button type="button" onClick={saveArea} className="rounded-md bg-violet-300 px-2 py-1 text-[10px] font-bold text-slate-950">Save ({areaVertices.length})</button></div><p className="mt-1 text-[10px] text-violet-100">Klik minimal 3 sudut peta.</p></div>}
             {!!areas.length && <button type="button" onClick={() => { setAreas([]); window.localStorage.removeItem('imora-monitoring-areas'); }} className="mt-1 rounded-lg border border-rose-300/30 bg-rose-400/10 px-2 py-2 text-left font-semibold text-rose-100 hover:bg-rose-400/20">Clear polygons</button>}
           </div>
-        </div>
+        </div>}
         <MapContainer
           center={position || [20, 0]}
           zoom={position ? 6 : 2}
@@ -424,7 +435,7 @@ export default function Map() {
             [85, 180],
           ]}
           maxBoundsViscosity={1.0}
-          style={{ width: '100%', height: '100%', cursor: drawingArea ? 'crosshair' : 'grab' }}
+          style={{ width: '100%', height: '100%', cursor: workspaceMode === 'pro' && drawingArea ? 'crosshair' : 'grab' }}
         >
           {mapMode === 'satellite' ? (
             <TileLayer attribution="Tiles © Esri" url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}" />
@@ -432,7 +443,7 @@ export default function Map() {
             <TileLayer attribution="© OpenStreetMap contributors" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
           )}
 
-          <LocationClickHandler setClickError={setClickError} onPointAdded={addPoint} drawingArea={drawingArea} />
+          <LocationClickHandler setClickError={setClickError} onPointAdded={addPoint} drawingArea={workspaceMode === 'pro' && drawingArea} enabled={workspaceMode === 'pro'} />
           <MapController /> {/* Update map view when lat/lon changes */}
           <IndeximSiteController request={indeximFocusRequest} />
           <DxfLayerController request={dxfFocusRequest} positions={dxfPositions} />
@@ -462,7 +473,7 @@ export default function Map() {
         </MapContainer>
       </div>
 
-      <section className="mt-4 rounded-2xl border border-white/15 bg-slate-950/35 p-3 shadow-lg backdrop-blur-md sm:p-4">
+      {workspaceMode === 'pro' && <section className="mt-4 rounded-2xl border border-white/15 bg-slate-950/35 p-3 shadow-lg backdrop-blur-md sm:p-4">
         {!!points.some((point) => point.report) && <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs"><span className="font-semibold text-white">Ringkasan risiko: <span className="text-emerald-200">{riskCounts.Normal} Normal</span> · <span className="text-amber-200">{riskCounts.Waspada} Waspada</span> · <span className="text-rose-300">{riskCounts.Siaga} Siaga</span></span>{mostRisky && <span className="text-white/65">Prioritas: <b className="text-white">{mostRisky.name || 'Titik tanpa nama'}</b> — {mostRisky.report?.summary}</span>}</div>}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div><p className="flex items-center gap-2 text-sm font-semibold text-white"><FiMapPin className="text-cyan-200" /> Monitoring points <span className="text-white/50">({points.length}{selectionMode === 'multi' ? ' · tanpa batas' : '/1'})</span></p><p className="mt-1 text-xs text-white/55">{selectionMode === 'multi' ? 'Mode multi aktif: klik peta atau marker Indexim untuk menambahkan titik.' : 'Pilih mode, klik peta, lalu terapkan screening forecast 6 jam.'}</p></div>
@@ -484,7 +495,7 @@ export default function Map() {
         {!!points.length && <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{points.map((point, index) => <article key={`${point.id}-card`} className="rounded-xl border border-white/10 bg-white/5 p-3 text-xs text-white/75"><div className="flex items-start justify-between gap-2"><div className="min-w-0 flex-1"><input value={point.name || ''} onChange={(event) => setPoints((current) => current.map((item) => item.id === point.id ? { ...item, name: event.target.value } : item))} placeholder={`Titik ${index + 1}`} className="w-full border-b border-white/15 bg-transparent pb-1 font-semibold text-white outline-none placeholder:text-white/50 focus:border-cyan-200" /><p className="mt-1 text-white/50">{point.lat.toFixed(3)}, {point.lon.toFixed(3)}</p><button type="button" onClick={() => setCoordinates(point.lat, point.lon, point.name || `Titik ${index + 1}`)} className="mt-2 rounded-md border border-cyan-200/25 bg-cyan-300/10 px-2 py-1 text-[10px] font-semibold text-cyan-100 hover:bg-cyan-300/20">Lihat Outlook 12 Bulan</button></div><button onClick={() => setPoints((current) => current.filter((item) => item.id !== point.id))} className="text-white/55 hover:text-rose-300" aria-label={`Hapus titik ${index + 1}`}><FiTrash2 size={15} /></button></div>{point.report ? <div className="mt-2"><p className={`flex items-center gap-1 font-bold ${point.report.level === 'Siaga' ? 'text-rose-300' : point.report.level === 'Waspada' ? 'text-amber-200' : 'text-emerald-200'}`}>{point.report.level === 'Normal' ? <FiCheckCircle /> : <FiAlertTriangle />}{point.report.level} · {point.report.summary}</p><p className="mt-1">Puncak: {formatTime(point.report.time)} · {point.report.metrics}</p><p className="mt-1 text-cyan-100">{point.report.flood}</p><p className="mt-1 text-white/55">Aksi: {point.report.action}</p></div> : <p className="mt-2 text-white/50">Belum diterapkan.</p>}</article>)}</div>}
         {!!points.some((point) => history[`${point.lat.toFixed(4)},${point.lon.toFixed(4)}`]?.length) && <div className="mt-3 rounded-xl border border-white/10 bg-white/5 p-3 text-xs"><p className="font-semibold text-white">Riwayat status (24 jam terakhir)</p><div className="mt-2 flex flex-wrap gap-2">{points.map((point, index) => { const entries = history[`${point.lat.toFixed(4)},${point.lon.toFixed(4)}`] || []; return entries.length ? <span key={point.id} className="rounded-lg bg-slate-950/30 px-2 py-1 text-white/70">{point.name || `Titik ${index + 1}`}: {entries.slice(-4).map((entry) => `${new Date(entry.at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} ${entry.level}`).join(' → ')}</span> : null; })}</div></div>}
         <p className="mt-3 text-[10px] leading-relaxed text-white/40">Screening preventif berbasis forecast model, bukan peringatan dini resmi. Ikuti peringatan BMKG dan otoritas setempat untuk keputusan keselamatan.</p>
-      </section>
+      </section>}
 
       {clickError && <Toast message={clickError} />}
     </>
