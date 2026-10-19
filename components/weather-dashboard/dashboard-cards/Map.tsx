@@ -489,7 +489,7 @@ export default function Map() {
           style={{ width: '100%', height: '100%', cursor: workspaceMode === 'pro' && drawingArea ? 'crosshair' : 'grab' }}
         >
           {mapMode === 'satellite' ? (
-            <TileLayer attribution="Tiles © Esri" url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}" />
+            <TileLayer attribution="Peta: Esri" url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}" />
           ) : (
             <TileLayer attribution="© OpenStreetMap contributors" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
           )}
