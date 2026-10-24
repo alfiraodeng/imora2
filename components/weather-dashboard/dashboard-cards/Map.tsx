@@ -19,7 +19,7 @@ import { INDEXIM_SITE_ASSETS, INDEXIM_SITE_CENTER, type IndeximAsset } from '@/d
 import { useState, useEffect, useCallback, useRef, type ChangeEvent } from 'react';
 import L from 'leaflet';
 import Toast from '@/components/main/Toast';
-import { FiAlertTriangle, FiBell, FiCheckCircle, FiDownload, FiLayers, FiLoader, FiMapPin, FiSave, FiTrash2, FiUpload } from 'react-icons/fi';
+import { FiAlertTriangle, FiBell, FiCheckCircle, FiDownload, FiLayers, FiLoader, FiMapPin, FiMaximize, FiMinimize, FiSave, FiTrash2, FiUpload } from 'react-icons/fi';
 
 type RiskLevel = 'Normal' | 'Waspada' | 'Siaga';
 type RiskReport = { level: RiskLevel; summary: string; time: string; rain: number; snow: number; temperature: number; gust: number; flood: string; action: string; metrics: string };
@@ -191,6 +191,17 @@ function DxfLayerController({ request, positions }: { request: number; positions
   return null;
 }
 
+function FullscreenMapController({ active }: { active: boolean }) {
+  const map = useMap();
+  useEffect(() => {
+    // Leaflet measures its container before the browser finishes entering or
+    // exiting fullscreen. Recalculate afterwards so tiles fill the viewport.
+    const timer = window.setTimeout(() => map.invalidateSize(), 120);
+    return () => window.clearTimeout(timer);
+  }, [active, map]);
+  return null;
+}
+
 const formatTime = (time: string) => new Intl.DateTimeFormat('id-ID', { hour: '2-digit', minute: '2-digit' }).format(new Date(time));
 
 function makeReport(data: any): RiskReport {
@@ -246,6 +257,7 @@ export default function Map() {
   const [toolPosition, setToolPosition] = useState({ x: 12, y: 66 });
   const [toolsOpen, setToolsOpen] = useState(false);
   const [workspaceMode, setWorkspaceMode] = useState<'view' | 'pro'>('view');
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const mapShell = useRef<HTMLDivElement>(null);
   const notifiedSiaga = useRef(new Set<string>());
   const pointsKey = points.map((point) => `${point.lat.toFixed(6)},${point.lon.toFixed(6)}`).join('|');
@@ -262,6 +274,23 @@ export default function Map() {
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, nextSession) => setAuthUserId(nextSession?.user?.id || null));
     return () => subscription.subscription.unsubscribe();
   }, []);
+
+  useEffect(() => {
+    const updateFullscreenState = () => setIsFullscreen(document.fullscreenElement === mapShell.current);
+    document.addEventListener('fullscreenchange', updateFullscreenState);
+    return () => document.removeEventListener('fullscreenchange', updateFullscreenState);
+  }, []);
+
+  const toggleFullscreen = async () => {
+    const shell = mapShell.current;
+    if (!shell) return;
+    try {
+      if (document.fullscreenElement === shell) await document.exitFullscreen();
+      else await shell.requestFullscreen();
+    } catch {
+      setClickError('Mode layar penuh tidak didukung oleh browser ini.');
+    }
+  };
 
   // The map component stays mounted when a user signs out and another user
   // signs in in the same browser. Reset first, then load only this user's rows.
@@ -535,12 +564,15 @@ export default function Map() {
 
   return (
     <>
-      <div ref={mapShell} className="relative h-[280px] w-full overflow-hidden rounded-2xl border border-white/20 shadow-lg sm:h-[340px] md:h-[400px]">
-        <div className="absolute right-3 top-3 z-[1002] flex overflow-hidden rounded-lg border border-white/30 bg-slate-950/85 text-xs text-white shadow-lg backdrop-blur">
+      <div ref={mapShell} className={`relative w-full overflow-hidden border border-white/20 bg-slate-950 shadow-lg ${isFullscreen ? 'h-dvh rounded-none border-0' : 'h-[280px] rounded-2xl sm:h-[340px] md:h-[400px]'}`}>
+        <button type="button" onClick={() => void toggleFullscreen()} className="absolute right-3 top-3 z-[1002] inline-flex items-center gap-1.5 rounded-lg border border-white/25 bg-slate-950/85 px-2.5 py-2 text-xs font-bold text-white shadow-lg backdrop-blur transition hover:bg-slate-800" aria-label={isFullscreen ? 'Keluar dari layar penuh' : 'Tampilkan peta layar penuh'} title={isFullscreen ? 'Keluar layar penuh' : 'Layar penuh'}>
+          {isFullscreen ? <FiMinimize size={15} /> : <FiMaximize size={15} />}<span className="hidden sm:inline">{isFullscreen ? 'Exit full screen' : 'Full screen'}</span>
+        </button>
+        <div className="absolute right-3 top-14 z-[1002] flex overflow-hidden rounded-lg border border-white/30 bg-slate-950/85 text-xs text-white shadow-lg backdrop-blur">
           <button type="button" onClick={() => changeWorkspaceMode('view')} className={`px-3 py-2 font-semibold transition ${workspaceMode === 'view' ? 'bg-white text-slate-900' : 'hover:bg-white/15'}`}>View</button>
           <button type="button" onClick={() => changeWorkspaceMode('pro')} className={`px-3 py-2 font-semibold transition ${workspaceMode === 'pro' ? 'bg-cyan-300 text-slate-950' : 'hover:bg-white/15'}`}>Pro</button>
         </div>
-        {workspaceMode === 'pro' && <div className="absolute right-3 top-14 z-[1000] flex overflow-hidden rounded-lg border border-white/30 bg-slate-950/80 text-xs text-white shadow-lg backdrop-blur">
+        {workspaceMode === 'pro' && <div className="absolute right-3 top-25 z-[1000] flex overflow-hidden rounded-lg border border-white/30 bg-slate-950/80 text-xs text-white shadow-lg backdrop-blur">
           <button onClick={() => setMapMode('dark')} className={`px-3 py-2 transition ${mapMode === 'dark' ? 'bg-white text-slate-900' : 'hover:bg-white/15'}`}>Map</button>
           <button onClick={() => setMapMode('satellite')} className={`px-3 py-2 transition ${mapMode === 'satellite' ? 'bg-white text-slate-900' : 'hover:bg-white/15'}`}>Satellite</button>
         </div>}
@@ -553,7 +585,7 @@ export default function Map() {
           <div className="p-2"><select value={dxfCoordinateSystem} onChange={(event) => setDxfCoordinateSystem(event.target.value as DxfCoordinateSystem)} className="h-8 w-full rounded-md border border-white/15 bg-slate-900 px-2 text-[10px] text-white outline-none"><option value="utm50n">UTM 50N · EPSG:32650</option><option value="wgs84">WGS84 longitude / latitude</option></select><div className="mt-2 grid grid-cols-2 gap-1.5"><button type="button" onClick={() => dxfInput.current?.click()} className="inline-flex items-center justify-center gap-1 rounded-lg bg-violet-300 px-2 py-2 text-[10px] font-bold text-slate-950 transition hover:bg-violet-200"><FiUpload size={12} /> Import DXF</button><button type="button" onClick={loadDxfDemo} className="rounded-lg border border-white/15 px-2 py-2 text-[10px] font-semibold text-white/85 transition hover:bg-white/10">Load demo</button></div><input ref={dxfInput} type="file" accept=".dxf,application/dxf" onChange={importDxf} className="hidden" /><p className="mt-2 text-[9px] leading-relaxed text-white/45">DXF diproses lokal di browser. Sistem koordinat harus sesuai file CAD.</p></div>
           {!!dxfLayers.length && <div className="max-h-20 space-y-1 overflow-y-auto border-t border-white/10 p-2">{dxfLayers.map((layer) => <div key={layer.id} className="flex items-center gap-1.5 rounded-md bg-white/5 px-2 py-1 text-[10px]"><i className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: layer.color }} /><span className="min-w-0 flex-1 truncate">{layer.name}</span><span className="text-white/40">{layer.features.length}</span><button type="button" onClick={() => setDxfLayers((current) => current.filter((item) => item.id !== layer.id))} className="text-white/45 hover:text-rose-300" aria-label={`Hapus layer ${layer.name}`}>×</button></div>)}</div>}
         </div>}
-        {workspaceMode === 'pro' && <button type="button" onClick={() => setToolsOpen((open) => !open)} className="absolute right-3 top-28 z-[1001] rounded-xl border border-white/25 bg-slate-950/85 px-3 py-2 text-xs font-bold text-white shadow-lg backdrop-blur-md sm:hidden">{toolsOpen ? 'Close tools' : '☰ Tools'}</button>}
+        {workspaceMode === 'pro' && <button type="button" onClick={() => setToolsOpen((open) => !open)} className="absolute right-3 top-40 z-[1001] rounded-xl border border-white/25 bg-slate-950/85 px-3 py-2 text-xs font-bold text-white shadow-lg backdrop-blur-md sm:hidden">{toolsOpen ? 'Close tools' : '☰ Tools'}</button>}
         {workspaceMode === 'pro' && <div className="pointer-events-none absolute bottom-7 left-3 z-[1000] max-w-[240px] rounded-xl border border-white/20 bg-slate-950/80 px-3 py-2 text-[10px] leading-relaxed text-white/80 shadow-lg backdrop-blur-md sm:text-xs">
           <span className="font-semibold text-cyan-200">Area referensi forecast: ±10 km</span>
           <span className="block text-white/60">Estimasi grid model di titik pilihan; kondisi lokal dapat berbeda.</span>
@@ -589,6 +621,7 @@ export default function Map() {
           <MapController /> {/* Update map view when lat/lon changes */}
           <IndeximSiteController request={indeximFocusRequest} />
           <DxfLayerController request={dxfFocusRequest} positions={dxfPositions} />
+          <FullscreenMapController active={isFullscreen} />
           <RemoveLeafletPrefix />
           {position && !drawingArea && (
             <>

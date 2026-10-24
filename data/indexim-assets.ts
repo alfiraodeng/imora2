@@ -13,4 +13,7 @@ export const INDEXIM_SITE_ASSETS: IndeximAsset[] = [
   { name: 'IPD T6 - KPP', kind: 'Disposal', lat: 1.049418, lon: 117.654393 }, { name: 'WD 7 Central - KPP', kind: 'Disposal', lat: 1.077103, lon: 117.686170 },
   { name: 'WD 3 - KPP', kind: 'Disposal', lat: 1.055175, lon: 117.680872 }, { name: 'IPD T2 - KPP', kind: 'Disposal', lat: 1.064471, lon: 117.657775 },
   { name: 'IPD T3 - KPP', kind: 'Disposal', lat: 1.078047, lon: 117.672985 },
+  // Survey coordinates supplied in WGS 84 / UTM Zone 50N (EPSG:32650).
+  { name: 'Pit Central', kind: 'Pit', lat: 1.122309098, lon: 117.653407324 },
+  { name: 'Pit JO North', kind: 'Pit', lat: 1.160285161, lon: 117.674543504 },
 ];
