@@ -1,23 +1,25 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { FiBarChart2, FiChevronLeft, FiChevronRight, FiCloud, FiHome, FiLogOut, FiMenu, FiSettings, FiX } from 'react-icons/fi';
+import { FiBarChart2, FiChevronLeft, FiChevronRight, FiCloud, FiEye, FiHome, FiLogOut, FiMenu, FiSettings, FiX } from 'react-icons/fi';
 import { useWeather } from '@/context/WeatherContext';
 import TodaysWeatherCard from './dashboard-cards/TodaysWeatherCard';
 import NextFourDays from './dashboard-cards/NextFourDays';
 import HourlyForecast from './dashboard-cards/HourlyForecast';
 import AnnualOutlook from './dashboard-cards/AnnualOutlook';
 import MiningRainIntelligence from './dashboard-cards/MiningRainIntelligence';
+import GodMode from './dashboard-cards/GodMode';
 import dynamic from 'next/dynamic';
 import Header from '../header/Header';
 import BackgroundVideo from './dashboard-background/BackgroundVideo';
 import { getSupabase } from '@/lib/supabase';
 
 const Map = dynamic(() => import('./dashboard-cards/Map'), { ssr: false, loading: () => <div className="h-[400px] w-full rounded-2xl border border-white/15 bg-white/10" /> });
-type Workspace = 'overview' | 'forecast' | 'mining' | 'data';
+type Workspace = 'overview' | 'forecast' | 'mining' | 'godmode' | 'data';
 const navigation: Array<{ id: Workspace; label: string; icon: typeof FiHome; note: string }> = [
   { id: 'overview', label: 'Overview', icon: FiHome, note: 'Map, outlook & operations' }, { id: 'forecast', label: 'Live Forecast', icon: FiCloud, note: 'Hourly & daily forecast' },
   { id: 'mining', label: 'Report', icon: FiBarChart2, note: 'Rain, delay & accuracy' },
+  { id: 'godmode', label: 'GOD MODE', icon: FiEye, note: 'Restricted spatial view' },
   { id: 'data', label: 'Data & Settings', icon: FiSettings, note: 'Rain-gauge import' },
 ];
 
@@ -45,6 +47,7 @@ export default function WeatherDashboard() {
       {active === 'overview' && <><div className="mb-5 grid gap-4 lg:grid-cols-[.8fr_1.2fr]"><TodaysWeatherCard />{forecast && forecast.length > 0 && <NextFourDays days={forecast} />}</div><HourlyForecast /><AnnualOutlook /><section className="mt-5"><div className="mb-3 rounded-2xl border border-cyan-200/15 bg-cyan-300/10 p-4 text-sm"><b className="text-cyan-50">Map & Engineering</b><p className="mt-1 text-white/65">Pit, Disposal, monitoring multi point, polygon, dan DXF tersedia langsung di Home.</p></div><Map /></section></>}
       {active === 'forecast' && <><div className="mb-5 grid gap-4 lg:grid-cols-[.8fr_1.2fr]"><TodaysWeatherCard />{forecast && forecast.length > 0 && <NextFourDays days={forecast} />}</div><HourlyForecast /></>}
       {active === 'mining' && <MiningRainIntelligence />}
+      {active === 'godmode' && <GodMode />}
       {active === 'data' && <div className="rounded-2xl border border-white/15 bg-slate-950/40 p-5"><h2 className="text-lg font-bold">Data & Settings</h2><p className="mt-2 text-sm text-white/60">Import actual rain-gauge dan forecast accuracy ada di Mining Intelligence. DXF dan data spatial tersedia di Home Overview.</p><div className="mt-4 flex flex-wrap gap-2"><button onClick={() => choose('mining')} className="rounded-xl bg-cyan-300 px-3 py-2 text-xs font-bold text-slate-950">Rain-gauge data</button><button onClick={() => choose('overview')} className="rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-xs font-bold">DXF & spatial data</button></div></div>}
     </div></main></div>;
 }
