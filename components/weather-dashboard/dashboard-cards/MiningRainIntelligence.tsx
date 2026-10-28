@@ -9,6 +9,7 @@ import { indeximMonthlyStats, monthDays, monthNames } from '@/data/indexim-rain-
 type DailyRain = { date: string; rain: number; probability: number; gust: number };
 type DailyActual = { date: string; rain: number; duration: number | null };
 type ForecastSnapshot = DailyRain & { savedAt: number };
+type YesterdayWeather = { date: string; rain: number; gust: number; weatherCode: number };
 const fmt = (value: number) => `${value.toFixed(1)} mm`;
 const numeric = (value: unknown) => Number(String(value ?? '').replace(/[^0-9,.-]/g, '').replace(',', '.')) || 0;
 
@@ -17,6 +18,7 @@ export default function MiningRainIntelligence() {
   const [days, setDays] = useState<DailyRain[]>([]); const [loading, setLoading] = useState(false); const [error, setError] = useState(''); const [exportOpen, setExportOpen] = useState(false);
   const [actuals, setActuals] = useState<DailyActual[]>([]); const [importStatus, setImportStatus] = useState(''); const actualInput = useRef<HTMLInputElement>(null);
   const [snapshots, setSnapshots] = useState<ForecastSnapshot[]>([]);
+  const [yesterdayWeather, setYesterdayWeather] = useState<YesterdayWeather | null>(null);
   const [authUserId, setAuthUserId] = useState<string | null>(null);
   const now = new Date(); const currentMonth = now.getMonth();
   const currentStats = indeximMonthlyStats[currentMonth];
@@ -34,6 +36,15 @@ export default function MiningRainIntelligence() {
     finally { setLoading(false); }
   }, [lat, lon, authUserId]);
 
+  const loadYesterdayWeather = useCallback(async () => {
+    try {
+      const query = new URLSearchParams({ latitude: String(lat), longitude: String(lon), daily: 'precipitation_sum,wind_gusts_10m_max,weather_code', past_days: '1', forecast_days: '1', timezone: 'auto', wind_speed_unit: 'kmh' });
+      const response = await fetch(`https://api.open-meteo.com/v1/forecast?${query}`); if (!response.ok) throw new Error('Yesterday Weather unavailable');
+      const data = await response.json(); const index = data.daily.time.length > 1 ? 0 : data.daily.time.length - 1;
+      if (index >= 0) setYesterdayWeather({ date: data.daily.time[index], rain: Number(data.daily.precipitation_sum[index] || 0), gust: Number(data.daily.wind_gusts_10m_max[index] || 0), weatherCode: Number(data.daily.weather_code[index] || 0) });
+    } catch (caught) { console.error(caught); setYesterdayWeather(null); }
+  }, [lat, lon]);
+
   useEffect(() => {
     const client = getSupabase(); if (!client) return;
     void client.auth.getUser().then(({ data }) => setAuthUserId(data.user?.id || null));
@@ -41,6 +52,7 @@ export default function MiningRainIntelligence() {
     return () => subscription.subscription.unsubscribe();
   }, []);
   useEffect(() => { void loadOperationalForecast(); }, [loadOperationalForecast]);
+  useEffect(() => { void loadYesterdayWeather(); }, [loadYesterdayWeather]);
   useEffect(() => { const client = getSupabase(); setActuals([]); setSnapshots([]); if (!client || !authUserId) return; let cancelled = false; void client.from('imora_status_history').select('data, created_at').eq('owner_id', authUserId).order('created_at', { ascending: true }).then(({ data }) => { if (cancelled) return; const rows = data || []; const latestActual = [...rows].reverse().find((row) => (row.data as { type?: string }).type === 'rain-gauge-actuals'); if (latestActual) setActuals(((latestActual.data as { values?: DailyActual[] }).values || [])); const forecastRows = rows.filter((row) => (row.data as { type?: string }).type === 'model-forecast-daily'); const merged = new Map<string, ForecastSnapshot>(); forecastRows.forEach((row) => ((row.data as { values?: ForecastSnapshot[] }).values || []).forEach((item) => merged.set(item.date, item))); if (merged.size) setSnapshots([...merged.values()].sort((a, b) => a.date.localeCompare(b.date)).slice(-120)); }); return () => { cancelled = true; }; }, [authUserId]);
   const persistActuals = (next: DailyActual[]) => { setActuals(next); const client = getSupabase(); if (client && authUserId) void client.from('imora_status_history').insert({ owner_id: authUserId, data: { type: 'rain-gauge-actuals', values: next } }); };
   const importActuals = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -64,19 +76,34 @@ export default function MiningRainIntelligence() {
   const mtdActuals = actuals.filter((day) => { const date = new Date(`${day.date}T00:00:00`); return date.getFullYear() === now.getFullYear() && date.getMonth() === currentMonth; });
   const actualMtd = mtdActuals.reduce((total, day) => total + day.rain, 0); const rainyDays = mtdActuals.filter((day) => day.rain > 0).length; const durationMtd = mtdActuals.reduce((total, day) => total + (day.duration || 0), 0); const actualPeak = mtdActuals.reduce<DailyActual | undefined>((peak, day) => !peak || day.rain > peak.rain ? day : peak, undefined);
   const validation = actuals.flatMap((actual) => { const forecast = snapshots.find((item) => item.date === actual.date); return forecast ? [{ actual, forecast }] : []; }); const mae = validation.length ? validation.reduce((total, item) => total + Math.abs(item.actual.rain - item.forecast.rain), 0) / validation.length : 0; const bias = validation.length ? validation.reduce((total, item) => total + item.forecast.rain - item.actual.rain, 0) / validation.length : 0; const rainHit = validation.length ? validation.filter((item) => (item.actual.rain >= .2) === (item.forecast.rain >= .2)).length / validation.length * 100 : 0;
+  const savedForecastByDate = new Map(snapshots.map((item) => [item.date, item]));
+  const currentForecastByDate = new Map(days.map((item) => [item.date, item]));
+  const yesterdayForecast = yesterdayWeather ? savedForecastByDate.get(yesterdayWeather.date) : undefined;
+  const yesterdayDifference = yesterdayWeather && yesterdayForecast ? yesterdayForecast.rain - yesterdayWeather.rain : null;
+  const comparisonRows = [...new Set([...actuals.map((item) => item.date), ...days.map((item) => item.date), ...snapshots.map((item) => item.date)])].sort().map((date) => {
+    const actual = actuals.find((item) => item.date === date); const savedForecast = savedForecastByDate.get(date); const forecast = savedForecast || currentForecastByDate.get(date); const month = new Date(`${date}T00:00:00`).getMonth(); const baseline = indeximMonthlyStats[month].mean / monthDays[month];
+    const comparable = Boolean(actual && savedForecast); const difference = comparable ? savedForecast!.rain - actual!.rain : null;
+    return { date, actualRain: actual?.rain ?? null, duration: actual?.duration ?? null, forecastRain: forecast?.rain ?? null, probability: forecast?.probability ?? null, gust: forecast?.gust ?? null, baseline, difference, absoluteError: difference === null ? null : Math.abs(difference), rainMatch: comparable ? (actual!.rain >= .2) === (savedForecast!.rain >= .2) : null, status: comparable ? 'Validated' : actual ? 'Actual belum memiliki snapshot forecast' : 'Menunggu actual' };
+  });
   const plan = (day: DailyRain) => day.rain >= 20 || day.gust >= 60 ? { level: 'SIAGA', delay: 5.5, action: 'Tahan hauling; inspeksi drainase, disposal, dan akses.' } : day.rain >= 8 || day.probability >= 80 || day.gust >= 45 ? { level: 'WASPADA', delay: 3, action: 'Atur sequence hauling; cek jalan dan sump sebelum shift.' } : day.rain >= 1 ? { level: 'PANTAU', delay: 1.5, action: 'Pantau radar/forecast; siapkan grader dan drainase.' } : { level: 'NORMAL', delay: 0, action: 'Operasi normal; tetap pantau pembaruan forecast.' };
   const exportRows = days.map((day) => ({ Date: day.date, 'Model rain (mm)': Number(day.rain.toFixed(1)), 'Rain probability (%)': day.probability, 'Wind gust (km/h)': Number(day.gust.toFixed(1)) }));
+  const comparisonExportRows = comparisonRows.map((row) => ({ Date: row.date, 'Actual rain-gauge (mm)': row.actualRain, 'Rain duration (hour)': row.duration, 'Saved forecast (mm)': row.forecastRain, 'Historical KPP daily baseline (mm)': Number(row.baseline.toFixed(2)), 'Difference forecast - actual (mm)': row.difference === null ? null : Number(row.difference.toFixed(2)), 'Absolute error (mm)': row.absoluteError === null ? null : Number(row.absoluteError.toFixed(2)), 'Rain event match': row.rainMatch === null ? null : row.rainMatch ? 'Match' : 'Mismatch', Status: row.status }));
 
   const exportExcel = async () => {
     const XLSX = await import('xlsx'); const workbook = XLSX.utils.book_new();
-    const sheet = XLSX.utils.aoa_to_sheet([['IMORA Mining Rain Intelligence'], [`Lokasi: ${searchedCity} (${lat.toFixed(5)}, ${lon.toFixed(5)})`], [`Baseline KPP: 2014–2025, 2025 hingga Agustus`], [], ['Statistik bulan berjalan', 'Nilai'], ['Rata-rata historis', currentStats.mean], ['P50', currentStats.p50], ['P80', currentStats.p80], ['P95', currentStats.p95], ['Proyeksi sisa bulan', monthProjection], [], ...[Object.keys(exportRows[0]), ...exportRows.map(Object.values)]]); sheet['!cols'] = [{ wch: 26 }, { wch: 24 }, { wch: 22 }, { wch: 20 }]; XLSX.utils.book_append_sheet(workbook, sheet, 'Rain intelligence'); XLSX.writeFile(workbook, `IMORA-mining-rain-${now.toISOString().slice(0, 10)}.xlsx`); setExportOpen(false);
+    const summary = XLSX.utils.aoa_to_sheet([['IMORA 2.0 · Actual vs Forecast Report'], [`Lokasi: ${searchedCity} (${lat.toFixed(5)}, ${lon.toFixed(5)})`], [`Dibuat: ${now.toLocaleString('id-ID')}`], ['Baseline KPP: 2014–2025, 2025 hingga Agustus'], [], ['Metric', 'Value'], ['Yesterday Weather date', yesterdayWeather?.date || 'Belum tersedia'], ['Yesterday Weather precipitation (mm)', yesterdayWeather ? Number(yesterdayWeather.rain.toFixed(1)) : 'Belum tersedia'], ['IMORA forecast snapshot (mm)', yesterdayForecast ? Number(yesterdayForecast.rain.toFixed(1)) : 'Snapshot belum tersedia'], ['Yesterday Weather difference (forecast - weather, mm)', yesterdayDifference === null ? 'Belum dapat dibandingkan' : Number(yesterdayDifference.toFixed(2))], ['Actual rain-gauge rows', actuals.length], ['Validated forecast vs rain-gauge rows', validation.length], ['MAE rain-gauge (mm)', validation.length ? Number(mae.toFixed(2)) : 'Belum tersedia'], ['Bias forecast - rain-gauge (mm)', validation.length ? Number(bias.toFixed(2)) : 'Belum tersedia'], ['Rain-event match (%)', validation.length ? Number(rainHit.toFixed(1)) : 'Belum tersedia'], ['Historical monthly mean (mm)', Number(currentStats.mean.toFixed(1))], ['Month projection (mm)', Number(monthProjection.toFixed(1))]]); summary['!cols'] = [{ wch: 44 }, { wch: 30 }]; XLSX.utils.book_append_sheet(workbook, summary, 'Summary');
+    const comparison = XLSX.utils.json_to_sheet(comparisonExportRows); comparison['!cols'] = [{ wch: 14 }, { wch: 22 }, { wch: 20 }, { wch: 20 }, { wch: 30 }, { wch: 30 }, { wch: 20 }, { wch: 18 }, { wch: 34 }]; XLSX.utils.book_append_sheet(workbook, comparison, 'Actual vs Forecast');
+    const forecastSheet = XLSX.utils.json_to_sheet(exportRows); forecastSheet['!cols'] = [{ wch: 14 }, { wch: 20 }, { wch: 23 }, { wch: 22 }]; XLSX.utils.book_append_sheet(workbook, forecastSheet, 'Forecast 16 days'); XLSX.writeFile(workbook, `IMORA-actual-vs-forecast-${now.toISOString().slice(0, 10)}.xlsx`); setExportOpen(false);
   };
   const exportPdf = async () => {
     const { jsPDF } = await import('jspdf'); const document = new jsPDF(); let y = 18;
     document.setFontSize(16); document.text('IMORA 2.0 · Mining Rain Intelligence', 14, y); y += 8; document.setFontSize(9); document.text(`Lokasi: ${searchedCity} (${lat.toFixed(5)}, ${lon.toFixed(5)})`, 14, y); y += 8;
     document.text(`Baseline KPP ${currentStats.observations} observasi ${monthNames[currentMonth]}: rata-rata ${fmt(currentStats.mean)} | P50 ${fmt(currentStats.p50)} | P80 ${fmt(currentStats.p80)} | P95 ${fmt(currentStats.p95)}`, 14, y); y += 9;
-    document.text(`Proyeksi sisa bulan: ${fmt(monthProjection)}. Ini adalah forecast model 16 hari + pola historis untuk hari di luar jangkauan model; bukan data aktual MTD.`, 14, y); y += 9;
-    days.forEach((day) => { if (y > 275) { document.addPage(); y = 18; } document.text(`${day.date}  |  Hujan ${fmt(day.rain)}  |  Peluang ${day.probability}%  |  Gust ${day.gust.toFixed(1)} km/jam`, 14, y); y += 6; }); document.save(`IMORA-mining-rain-${now.toISOString().slice(0, 10)}.pdf`); setExportOpen(false);
+    document.text(`Yesterday Weather: ${yesterdayWeather ? `${yesterdayWeather.date} · ${fmt(yesterdayWeather.rain)}` : 'belum tersedia'} | Snapshot IMORA: ${yesterdayForecast ? fmt(yesterdayForecast.rain) : 'belum tersedia'} | Selisih: ${yesterdayDifference === null ? 'belum dapat dibandingkan' : `${yesterdayDifference >= 0 ? '+' : ''}${fmt(yesterdayDifference)}`}`, 14, y); y += 9;
+    document.text(`Actual vs forecast tervalidasi: ${validation.length} hari | MAE: ${validation.length ? fmt(mae) : 'belum tersedia'} | Bias: ${validation.length ? fmt(bias) : 'belum tersedia'} | Kecocokan hujan: ${validation.length ? `${rainHit.toFixed(0)}%` : 'belum tersedia'}`, 14, y); y += 9;
+    document.text(`Proyeksi sisa bulan: ${fmt(monthProjection)}. Forecast dan actual dibandingkan hanya pada tanggal yang memiliki snapshot forecast tersimpan serta rain-gauge actual.`, 14, y); y += 9;
+    document.setFontSize(10); document.text('Perbandingan actual vs forecast', 14, y); y += 6; document.setFontSize(8);
+    comparisonRows.forEach((row) => { if (y > 275) { document.addPage(); y = 18; } const actual = row.actualRain === null ? '—' : fmt(row.actualRain); const forecast = row.forecastRain === null ? '—' : fmt(row.forecastRain); const diff = row.difference === null ? '—' : `${row.difference >= 0 ? '+' : ''}${fmt(row.difference)}`; document.text(`${row.date} | Actual ${actual} | Forecast ${forecast} | Selisih ${diff} | ${row.status}`, 14, y); y += 5.5; }); document.save(`IMORA-actual-vs-forecast-${now.toISOString().slice(0, 10)}.pdf`); setExportOpen(false);
   };
 
   const maxMean = Math.max(...indeximMonthlyStats.map((item) => item.mean));

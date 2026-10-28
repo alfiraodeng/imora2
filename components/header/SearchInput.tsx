@@ -49,6 +49,7 @@ export default function SearchInput() {
       const coordinates = parseCoordinates(query);
       if (coordinates) {
         const { latitude, longitude } = coordinates;
+        window.dispatchEvent(new CustomEvent('imora:coordinate-search', { detail: { latitude, longitude } }));
         setCoordinates(latitude, longitude, `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
         setQuery('');
         return;

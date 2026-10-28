@@ -148,16 +148,16 @@ function LocationClickHandler({ setClickError, onPointAdded, drawingArea, enable
   return null;
 }
 
-// Moves map view when lat/lon changes
+// Moves map view when a location is selected from search, a card, or the map.
 function MapController() {
-  const { lat, lon, setCoordinates } = useWeather();
+  const { lat, lon } = useWeather();
   const map = useMapEvents({});
 
   useEffect(() => {
     if (lat !== null && lon !== null) {
-      map.panTo([lat, lon], {
+      map.flyTo([lat, lon], Math.max(map.getZoom(), 13), {
         animate: true,
-        duration: 1,
+        duration: 1.15,
       });
     }
   }, [lat, lon, map]);
