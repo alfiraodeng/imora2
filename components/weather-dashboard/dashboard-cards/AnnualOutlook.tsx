@@ -7,16 +7,18 @@ import { indeximMonthlyStats } from '@/data/indexim-rain-history';
 import { prepareIndeximPdf } from '@/lib/pdf-report-branding';
 
 type OutlookMonth = { date: string; temperature: number | null; precipitation: number | null; snow: number | null; source: 'ECMWF corrected to local baseline' | 'Local historical baseline' };
+type OutlookPoint = { id: string; lat: number; lon: number; name?: string };
 const monthLabel = (date: string) => new Intl.DateTimeFormat('id-ID', { month: 'short', year: 'numeric' }).format(new Date(`${date}T00:00:00`));
 
 export default function AnnualOutlook() {
-  const { lat, lon, weatherData, searchedCity } = useWeather();
+  const { lat, lon, weatherData, searchedCity, setCoordinates } = useWeather();
   const [months, setMonths] = useState<OutlookMonth[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [loadedLocation, setLoadedLocation] = useState('');
   const [exportOpen, setExportOpen] = useState(false);
   const [pointRequest, setPointRequest] = useState(0);
+  const [outlookPoints, setOutlookPoints] = useState<OutlookPoint[]>([]);
 
   const loadOutlook = async () => {
     setLoading(true); setError('');
@@ -56,6 +58,7 @@ export default function AnnualOutlook() {
   }, [lat, lon]);
 
   useEffect(() => { const onOpenOutlook = () => setPointRequest((value) => value + 1); window.addEventListener('imora:open-outlook', onOpenOutlook); return () => window.removeEventListener('imora:open-outlook', onOpenOutlook); }, []);
+  useEffect(() => { const onMonitoringPoints = (event: Event) => { const detail = (event as CustomEvent<OutlookPoint[]>).detail || []; setOutlookPoints(detail); }; window.addEventListener('imora:monitoring-points', onMonitoringPoints); return () => window.removeEventListener('imora:monitoring-points', onMonitoringPoints); }, []);
   useEffect(() => { if (pointRequest) void loadOutlook(); // Explicit map action: refresh outlook for its newly active coordinate.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pointRequest, lat, lon]);
@@ -109,6 +112,7 @@ export default function AnnualOutlook() {
   return (
     <section id="imora-annual-outlook" className="mb-5 scroll-mt-5 rounded-2xl border border-white/15 bg-slate-950/35 p-3 shadow-lg backdrop-blur-md sm:mb-6 sm:p-4">
       <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="flex items-center gap-2 text-sm font-semibold text-white"><FiCalendar className="text-cyan-200" /> Outlook 12 Bulan</p><p className="mt-1 text-xs text-white/55">Lokasi: <span className="font-semibold text-white/80">{weatherData?.name || searchedCity}</span></p></div><div className="flex items-center gap-2"><div className="relative">{months.length > 0 && <button type="button" onClick={() => setExportOpen((open) => !open)} className="inline-flex items-center gap-1.5 rounded-xl border border-cyan-200/30 bg-cyan-300/15 px-3 py-2 text-xs font-bold text-cyan-50 transition hover:bg-cyan-300/25"><FiDownload /> Download report</button>}{exportOpen && <div className="absolute right-0 top-[calc(100%+6px)] z-20 w-44 overflow-hidden rounded-xl border border-white/15 bg-slate-900/95 p-1 shadow-2xl backdrop-blur"><button type="button" onClick={exportExcel} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-semibold text-white hover:bg-white/10"><FiDownload /> Excel (.xlsx)</button><button type="button" onClick={exportPdf} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-semibold text-white hover:bg-white/10"><FiFileText /> PDF report</button></div>}</div><button type="button" onClick={loadOutlook} disabled={loading} className="inline-flex items-center gap-2 rounded-xl bg-white/10 px-3 py-2 text-xs font-bold text-white transition hover:bg-white/20 disabled:opacity-60">{loading && <FiLoader className="animate-spin" />}{loading ? 'Memuat…' : months.length ? 'Perbarui outlook' : 'Lihat outlook'}</button></div></div>
+      {outlookPoints.length > 1 && <div className="mt-3 rounded-xl border border-cyan-200/20 bg-cyan-300/10 p-3"><div className="flex flex-wrap items-center justify-between gap-2"><p className="text-xs font-bold text-cyan-50">Outlook monitoring · {outlookPoints.length} titik aktif</p><span className="text-[10px] text-white/55">Pilih titik untuk melihat outlook 12 bulan pada koordinatnya.</span></div><div className="mt-2 flex flex-wrap gap-2">{outlookPoints.map((point, index) => { const active = Math.abs(point.lat - lat) < .00001 && Math.abs(point.lon - lon) < .00001; return <button key={point.id} type="button" onClick={() => { setCoordinates(point.lat, point.lon, point.name || `Titik ${index + 1}`); setPointRequest((value) => value + 1); }} className={`rounded-lg px-3 py-2 text-xs font-semibold transition ${active ? 'bg-cyan-300 text-slate-950' : 'border border-white/15 bg-white/5 text-white hover:bg-white/15'}`}>{point.name || `Titik ${index + 1}`}</button>; })}</div></div>}
       {!!months.length && <div className="mt-3 grid gap-2 rounded-xl border border-white/10 bg-white/5 p-3 text-xs sm:grid-cols-2"><p className="text-cyan-100"><b>● Bulan 1–7:</b> prediksi ECMWF dikoreksi dengan baseline historis lokasi aktif.</p><p className="text-violet-100"><b>● Bulan 8–12:</b> climatology curah hujan lokasi aktif.</p></div>}
       {!!months.length && <div className="mt-3 flex snap-x snap-mandatory gap-3 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:grid md:grid-cols-3 md:overflow-visible">{months.map((month, index) => <article key={month.date} className="min-h-[150px] min-w-[76%] snap-start rounded-2xl border border-white/15 bg-white/10 p-4 text-xs shadow-lg backdrop-blur-sm md:min-w-0"><div className="flex items-start justify-between gap-2"><div><p className="text-[10px] font-bold tracking-[.12em] text-white/45">BULAN {index + 1}</p><p className="mt-1 text-base font-semibold text-white">{monthLabel(month.date)}</p></div><span className={`rounded-full px-2 py-1 text-[9px] font-semibold ${month.source === 'ECMWF corrected to local baseline' ? 'bg-cyan-300/15 text-cyan-100' : 'bg-violet-300/15 text-violet-100'}`}>{month.source === 'ECMWF corrected to local baseline' ? 'ECMWF + Lokal' : 'Baseline lokal'}</span></div><div className="mt-5 grid grid-cols-3 gap-2 border-t border-white/10 pt-3"><p className="text-white/55">Suhu<br /><b className="text-sm text-white">{month.temperature?.toFixed(1)}°C</b></p><p className="text-white/55">Hujan<br /><b className="text-sm text-white">{month.precipitation?.toFixed(1)} mm</b></p><p className="text-white/55">Salju<br /><b className="text-sm text-white">{month.snow?.toFixed(1)} cm</b></p></div></article>)}</div>}
       {!!months.length && <p className="mt-3 text-[10px] leading-relaxed text-white/40">Gunakan ini untuk perencanaan. Ini bukan prediksi “akan hujan pada tanggal tertentu”, karena cuaca harian tidak dapat dipastikan sampai satu tahun.</p>}

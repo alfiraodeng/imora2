@@ -267,6 +267,8 @@ export default function Map() {
 
   const position = lat !== null && lon !== null ? ([lat, lon] as [number, number]) : null;
 
+  useEffect(() => { window.dispatchEvent(new CustomEvent('imora:monitoring-points', { detail: points.map(({ id, lat: pointLat, lon: pointLon, name }) => ({ id, lat: pointLat, lon: pointLon, name })) })); }, [points]);
+
   useEffect(() => {
     if ('Notification' in window) setNotificationPermission(Notification.permission);
     const supabase = getSupabase();
