@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { FiCalendar, FiDownload, FiFileText, FiLoader } from 'react-icons/fi';
 import { useWeather } from '@/context/WeatherContext';
 import { indeximMonthlyStats } from '@/data/indexim-rain-history';
+import { prepareIndeximPdf } from '@/lib/pdf-report-branding';
 
 type OutlookMonth = { date: string; temperature: number | null; precipitation: number | null; snow: number | null; source: 'ECMWF corrected to KPP' | 'KPP historical baseline' };
 const monthLabel = (date: string) => new Intl.DateTimeFormat('id-ID', { month: 'short', year: 'numeric' }).format(new Date(`${date}T00:00:00`));
@@ -89,23 +90,13 @@ export default function AnnualOutlook() {
     if (!months.length) return;
     const { jsPDF } = await import('jspdf');
     const document = new jsPDF({ unit: 'mm', format: 'a4' });
-    let y = 18;
-    document.setFontSize(16); document.text('IMORA 2.0', 14, y); y += 8;
-    document.setFontSize(13); document.text('Outlook 12 Bulan', 14, y); y += 7;
-    document.setFontSize(9); document.setTextColor(85, 85, 85);
-    document.text(document.splitTextToSize(`${weatherData?.name || searchedCity || 'Lokasi dipilih'} · ${lat.toFixed(4)}, ${lon.toFixed(4)} · Dibuat ${new Date().toLocaleString('id-ID')}`, 182), 14, y); y += 11;
-    document.setTextColor(20, 20, 20); document.setFontSize(9);
+    const branding = await prepareIndeximPdf(document, 'Outlook 12 Bulan', `${weatherData?.name || searchedCity || 'Lokasi dipilih'} · ${lat.toFixed(4)}, ${lon.toFixed(4)} · Dibuat ${new Date().toLocaleString('id-ID')}`, `OUT-${new Date().toISOString().slice(0, 10).replaceAll('-', '')}`); branding.decorate(); let y = 61;
+    document.setFillColor(239, 247, 250); document.roundedRect(14, 56, 182, 20, 3, 3, 'F'); document.setFont('helvetica', 'bold'); document.setFontSize(8); document.setTextColor(22, 67, 91); document.text('OUTLOOK BASIS', 20, 64); document.setFont('helvetica', 'normal'); document.setFontSize(7.4); document.setTextColor(69, 93, 110); document.text(document.splitTextToSize('Bulan 1–7 menggunakan prediksi musiman ECMWF yang dikoreksi baseline KPP. Bulan 8–12 menggunakan climatology KPP untuk perencanaan, bukan prediksi harian.', 168), 20, 70); y = 86;
+    document.setFillColor(15, 56, 80); document.roundedRect(14, y - 5, 182, 7, 1.5, 1.5, 'F'); document.setFont('helvetica', 'bold'); document.setFontSize(7); document.setTextColor(255, 255, 255); document.text('PERIODE', 18, y); document.text('HORIZON', 58, y); document.text('SUHU', 83, y); document.text('HUJAN', 111, y); document.text('SALJU', 139, y); document.text('METODE', 160, y); y += 7;
     months.forEach((month, index) => {
-      const line = `${String(index + 1).padStart(2, '0')}  ${monthLabel(month.date)}   |   Suhu ${month.temperature?.toFixed(1) ?? '—'}°C   |   Presipitasi ${month.precipitation?.toFixed(1) ?? '—'} mm   |   Salju ${month.snow?.toFixed(1) ?? '—'} cm`;
-      const source = month.source === 'ECMWF corrected to KPP' ? 'Prediksi ECMWF dikoreksi baseline KPP' : 'Climatology curah hujan aktual KPP';
-      if (y > 263) { document.addPage(); y = 18; }
-      document.setFontSize(10); document.text(line, 14, y); y += 5;
-      document.setFontSize(8); document.setTextColor(95, 95, 95); document.text(source, 18, y); document.setTextColor(20, 20, 20); y += 7;
+      if (y > 274) { branding.nextPage(); y = 61; }
+      if (index % 2 === 0) { document.setFillColor(247, 250, 252); document.rect(14, y - 5, 182, 6.8, 'F'); } document.setFont('helvetica', 'normal'); document.setFontSize(7); document.setTextColor(51, 73, 88); document.text(monthLabel(month.date), 18, y); document.text(`Bulan ${index + 1}`, 58, y); document.text(`${month.temperature?.toFixed(1) ?? '—'} °C`, 83, y); document.text(`${month.precipitation?.toFixed(1) ?? '—'} mm`, 111, y); document.text(`${month.snow?.toFixed(1) ?? '—'} cm`, 139, y); document.text(month.source === 'ECMWF corrected to KPP' ? 'ECMWF + KPP' : 'Baseline KPP', 160, y); y += 6.8;
     });
-    if (y > 258) { document.addPage(); y = 18; }
-    document.setDrawColor(185, 185, 185); document.line(14, y, 196, y); y += 6;
-    document.setFontSize(8); document.setTextColor(85, 85, 85);
-    document.text(document.splitTextToSize('Catatan: Bulan 1–7 menggunakan prediksi musiman ECMWF. Bulan 8–12 menggunakan pola rata-rata iklim 15 tahun dan bukan prediksi cuaca pada tanggal tertentu. Gunakan untuk perencanaan, bukan peringatan dini resmi.', 180), 14, y);
     document.save(`${reportFilename}.pdf`);
     setExportOpen(false);
   };

@@ -15,6 +15,7 @@ import {
 } from 'react-leaflet';
 import { useWeather } from '@/context/WeatherContext';
 import { getSupabase } from '@/lib/supabase';
+import { prepareIndeximPdf } from '@/lib/pdf-report-branding';
 import { INDEXIM_SITE_ASSETS, INDEXIM_SITE_CENTER, type IndeximAsset } from '@/data/indexim-assets';
 import { useState, useEffect, useCallback, useRef, type ChangeEvent } from 'react';
 import L from 'leaflet';
@@ -541,15 +542,13 @@ export default function Map() {
     const reported = points.filter((point) => point.report);
     if (!reported.length) { setClickError('Terapkan monitoring terlebih dahulu sebelum ekspor.'); return; }
     const { jsPDF } = await import('jspdf');
-    const document = new jsPDF();
-    let y = 18;
-    document.setFontSize(18); document.text('IMORA Monitoring Report', 14, y); y += 9;
-    document.setFontSize(9); document.text(`Generated: ${new Date().toLocaleString('id-ID')} | Forecast screening, not an official warning.`, 14, y); y += 10;
+    const document = new jsPDF({ unit: 'mm', format: 'a4' });
+    const branding = await prepareIndeximPdf(document, 'Monitoring Risk Report', `Generated ${new Date().toLocaleString('id-ID')} · ${reported.length} active monitoring point(s)`, `MON-${new Date().toISOString().slice(0, 10).replaceAll('-', '')}`); branding.decorate(); let y = 61;
     reported.forEach((point, index) => {
       const report = point.report!;
       const lines = document.splitTextToSize(`${point.name || `Titik ${index + 1}`} (${point.lat.toFixed(4)}, ${point.lon.toFixed(4)})\nStatus: ${report.level} - ${report.summary}\nPeak: ${formatTime(report.time)} | ${report.metrics}\nContextual screening: ${report.flood}\nPreventive action: ${report.action}`, 180);
-      if (y + lines.length * 5 > 280) { document.addPage(); y = 18; }
-      document.setFontSize(11); document.text(lines, 14, y); y += lines.length * 5 + 7;
+      if (y + lines.length * 5 + 8 > 280) { branding.nextPage(); y = 61; }
+      document.setFillColor(report.level === 'Siaga' ? 255 : report.level === 'Waspada' ? 255 : 237, report.level === 'Siaga' ? 239 : report.level === 'Waspada' ? 248 : 252, report.level === 'Siaga' ? 239 : report.level === 'Waspada' ? 222 : 245); document.roundedRect(14, y - 5, 182, lines.length * 5 + 7, 3, 3, 'F'); document.setFont('helvetica', 'bold'); document.setFontSize(10); document.setTextColor(15, 44, 64); document.text(point.name || `Titik ${index + 1}`, 20, y); document.setFont('helvetica', 'normal'); document.setFontSize(8); document.setTextColor(51, 73, 88); document.text(lines.slice(1), 20, y + 5); y += lines.length * 5 + 10;
     });
     document.save(`IMORA-monitoring-${new Date().toISOString().slice(0, 10)}.pdf`);
   };
