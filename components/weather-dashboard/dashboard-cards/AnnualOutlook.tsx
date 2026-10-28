@@ -35,13 +35,12 @@ export default function AnnualOutlook() {
         const values = Object.values(totals); return values.reduce((sum, value) => sum + value, 0) / Math.max(values.length, 1);
       };
       const forecast: OutlookMonth[] = seasonal.monthly.time.map((time: string, index: number) => { const month = new Date(`${time}T00:00:00`).getMonth(); const baseline = gridMonthlyMean(month); const localBaseline = indeximMonthlyStats[month].mean; return { date: time, temperature: seasonal.monthly.temperature_2m_mean[index], precipitation: baseline > 0 ? localBaseline * (Number(seasonal.monthly.precipitation_mean[index] || 0) / baseline) : localBaseline, snow: seasonal.monthly.snowfall_mean[index], source: 'ECMWF corrected to local baseline' }; });
-      const future = new Date(`${forecast[forecast.length - 1].date}T00:00:00`);
+      const lastForecastDate = forecast[forecast.length - 1].date.slice(0, 7).split('-').map(Number); const lastForecastYear = lastForecastDate[0]; const lastForecastMonth = lastForecastDate[1] - 1;
       const baseline: OutlookMonth[] = Array.from({ length: 5 }, (_, offset) => {
-        future.setMonth(future.getMonth() + 1);
-        const month = future.getMonth();
+        const date = new Date(Date.UTC(lastForecastYear, lastForecastMonth + offset + 1, 1)); const month = date.getUTCMonth();
         const values = archive.daily.time.map((time: string, index: number) => ({ month: new Date(`${time}T00:00:00`).getMonth(), temperature: archive.daily.temperature_2m_mean[index], snow: archive.daily.snowfall_sum[index] })).filter((value: { month: number }) => value.month === month);
         const average = (key: 'temperature' | 'snow') => values.reduce((sum: number, value: any) => sum + Number(value[key] || 0), 0) / Math.max(values.length, 1);
-        return { date: future.toISOString().slice(0, 7), temperature: average('temperature'), precipitation: indeximMonthlyStats[month].mean, snow: average('snow') * 30, source: 'Local historical baseline' };
+        return { date: date.toISOString().slice(0, 7), temperature: average('temperature'), precipitation: indeximMonthlyStats[month].mean, snow: average('snow') * 30, source: 'Local historical baseline' };
       });
       setMonths([...forecast, ...baseline]);
       setLoadedLocation(`${lat.toFixed(4)},${lon.toFixed(4)}`);
