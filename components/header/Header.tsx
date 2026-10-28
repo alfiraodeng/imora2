@@ -15,8 +15,8 @@ export default function Header() {
     useEffect(() => {
         const client = getSupabase();
         if (!client) return;
-        void client.auth.getUser().then(({ data }) => setUserLabel(data.user?.email || ''));
-        const { data: subscription } = client.auth.onAuthStateChange((_event, session) => setUserLabel(session?.user?.email || ''));
+        void client.auth.getUser().then(({ data }) => setUserLabel(String(data.user?.user_metadata?.nik || data.user?.email || '')));
+        const { data: subscription } = client.auth.onAuthStateChange((_event, session) => setUserLabel(String(session?.user?.user_metadata?.nik || session?.user?.email || '')));
         return () => subscription.subscription.unsubscribe();
     }, []);
 
