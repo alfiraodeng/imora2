@@ -5,6 +5,32 @@ import { FiSearch } from 'react-icons/fi';
 import { useWeather } from '@/context/WeatherContext';
 import Toast from '@/components/main/Toast';
 
+type Coordinates = { latitude: number; longitude: number };
+
+function parseCoordinates(value: string): Coordinates | null {
+  // Allow the formats operators normally copy from GIS, Excel, Google Maps,
+  // or a survey sheet: "lat, lon", "lon, lat", "lat: … lng: …", brackets,
+  // spaces, and Indonesian decimal commas when values are separated by ; or |.
+  const raw = value.trim();
+  const normalized = (/[;|]/.test(raw)
+    ? raw.replace(/([+-]?\d+),(\d+)/g, '$1.$2')
+    : raw
+  ).replace(/([+-]?\d+),(\d+)(?=\s+(?:lat(?:itude)?|lon(?:gitude)?|lng)\b)/gi, '$1.$2');
+  const latFirst = normalized.match(/(?:lat(?:itude)?|y)\s*[:=]?\s*([+-]?\d+(?:\.\d+)?).*?(?:lon(?:gitude)?|lng|x)\s*[:=]?\s*([+-]?\d+(?:\.\d+)?)/i);
+  const lonFirst = normalized.match(/(?:lon(?:gitude)?|lng|x)\s*[:=]?\s*([+-]?\d+(?:\.\d+)?).*?(?:lat(?:itude)?|y)\s*[:=]?\s*([+-]?\d+(?:\.\d+)?)/i);
+  const numbers = latFirst ? [Number(latFirst[1]), Number(latFirst[2])]
+    : lonFirst ? [Number(lonFirst[2]), Number(lonFirst[1])]
+      : (normalized.match(/[+-]?\d+(?:\.\d+)?/g) || []).map(Number);
+  if (numbers.length !== 2 || numbers.some((item) => !Number.isFinite(item))) return null;
+  const [first, second] = numbers;
+  // A value outside ±90 can only be longitude. When both can be latitude,
+  // accept the widespread latitude, longitude copy-paste order by default.
+  const latitude = Math.abs(first) > 90 ? second : first;
+  const longitude = Math.abs(first) > 90 ? first : second;
+  if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) return null;
+  return { latitude, longitude };
+}
+
 export default function SearchInput() {
   const [query, setQuery] = useState('');
   const [searching, setSearching] = useState(false);
@@ -20,15 +46,9 @@ export default function SearchInput() {
     setSearching(true);
 
     try {
-      // Coordinates are accepted as longitude, latitude (e.g. 116.8300, -1.2700).
-      const coordinates = query.trim().match(/^\s*(-?\d{1,3}(?:\.\d+)?)\s*[,\s]\s*(-?\d{1,2}(?:\.\d+)?)\s*$/);
+      const coordinates = parseCoordinates(query);
       if (coordinates) {
-        const longitude = Number(coordinates[1]);
-        const latitude = Number(coordinates[2]);
-        if (longitude < -180 || longitude > 180 || latitude < -90 || latitude > 90) {
-          setSearchError('Coordinates are outside the valid longitude/latitude range.');
-          return;
-        }
+        const { latitude, longitude } = coordinates;
         setCoordinates(latitude, longitude, `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
         setQuery('');
         return;
@@ -77,7 +97,8 @@ export default function SearchInput() {
         <input
           type="text"
           value={query}
-          placeholder="Search city or lon, lat"
+          placeholder="Kota atau lat, lon"
+          title="Contoh: -1.2700, 116.8300 · 116.8300, -1.2700 · Lat: -1.2700, Lon: 116.8300"
           onChange={(e) => setQuery(e.target.value)}
           className="w-full rounded-full border border-white/20 bg-white/10 py-2.5 pl-4 pr-10 text-sm text-white placeholder:text-white/45 outline-none backdrop-blur-md transition focus:border-cyan-200/70 focus:bg-white/15"
           disabled={searching}
